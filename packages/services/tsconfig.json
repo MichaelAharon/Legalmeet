@@ -1,0 +1,5 @@
+{
+  "extends": "@legalmeet/typescript-config/base.json",
+  "include": ["src"],
+  "compilerOptions": { "outDir": "dist" }
+}
