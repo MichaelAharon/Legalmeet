@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
-import { mockMeetings, mockParticipants } from '../../lib/mock-store';
+import { mockMeetings, mockParticipants, mockSignatures } from '../../lib/mock-store';
 
 export async function GET(_req: NextRequest, { params }: { params: { meetingId: string } }) {
   if (useMock()) {
@@ -59,12 +59,20 @@ export async function DELETE(_req: NextRequest, { params }: { params: { meetingI
   if (useMock()) {
     const idx = mockMeetings.findIndex(m => m.id === params.meetingId);
     if (idx === -1) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (mockSignatures.some(s => s.meetingId === params.meetingId)) {
+      return NextResponse.json({ error: 'Cannot delete a meeting with signed NDA records' }, { status: 409 });
+    }
     mockMeetings.splice(idx, 1);
     return NextResponse.json({ success: true });
   }
 
   const db = getDb();
   const { error } = await db.from('meetings').delete().eq('id', params.meetingId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === '23503') {
+      return NextResponse.json({ error: 'Cannot delete a meeting with signed NDA records' }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ success: true });
 }
