@@ -1,6 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
-import { mockMeetings, mockParticipants } from '../../lib/mock-store';
+import {
+  mockBundles,
+  mockMeetings,
+  mockParticipants,
+  mockRecordings,
+  mockSignatures,
+  mockTranscripts,
+} from '../../lib/mock-store';
+
+const protectedArtifactTables = ['nda_signatures', 'recordings', 'transcripts', 'document_bundles'] as const;
+
+function hasMockProtectedArtifacts(meetingId: string) {
+  return (
+    mockSignatures.some((signature: any) => signature.meetingId === meetingId) ||
+    mockRecordings.some((recording: any) => recording.meetingId === meetingId) ||
+    mockTranscripts.some((transcript: any) => transcript.meetingId === meetingId) ||
+    mockBundles.some((bundle: any) => bundle.meetingId === meetingId)
+  );
+}
 
 export async function GET(_req: NextRequest, { params }: { params: { meetingId: string } }) {
   if (useMock()) {
@@ -59,12 +77,36 @@ export async function DELETE(_req: NextRequest, { params }: { params: { meetingI
   if (useMock()) {
     const idx = mockMeetings.findIndex(m => m.id === params.meetingId);
     if (idx === -1) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (hasMockProtectedArtifacts(params.meetingId)) {
+      return NextResponse.json(
+        { error: 'Meeting has signed NDAs, recordings, transcripts, or document bundles and cannot be deleted' },
+        { status: 409 }
+      );
+    }
     mockMeetings.splice(idx, 1);
     return NextResponse.json({ success: true });
   }
 
   const db = getDb();
+  for (const table of protectedArtifactTables) {
+    const { count, error } = await db
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('meeting_id', params.meetingId);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if ((count ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'Meeting has signed NDAs, recordings, transcripts, or document bundles and cannot be deleted' },
+        { status: 409 }
+      );
+    }
+  }
+
   const { error } = await db.from('meetings').delete().eq('id', params.meetingId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const status = error.code === '23503' ? 409 : 500;
+    return NextResponse.json({ error: error.message }, { status });
+  }
   return NextResponse.json({ success: true });
 }
