@@ -25,7 +25,7 @@ export async function POST() {
   const { data: profiles, error: profileError } = await db
     .from('profiles')
     .select('id')
-    .ilike('email', email)
+    .eq('email', email)
     .limit(2);
 
   if (profileError) {
