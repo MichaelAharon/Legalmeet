@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withMiddlewareAuthRequired } from '@auth0/nextjs-auth0/edge';
 
-const isMock = process.env.USE_MOCK_SERVICES === 'true' || process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+const isMockAuthBypass =
+  process.env.NODE_ENV === 'development' &&
+  (process.env.USE_MOCK_SERVICES === 'true' || process.env.NEXT_PUBLIC_USE_MOCK === 'true');
 
 function addSecurityHeaders(response: NextResponse) {
   response.headers.set('x-request-id', crypto.randomUUID());
@@ -16,8 +18,8 @@ function mockMiddleware(request: NextRequest) {
   return addSecurityHeaders(NextResponse.next());
 }
 
-// In mock mode, skip Auth0 entirely
-export default isMock
+// In local mock mode, skip Auth0 entirely for development convenience.
+export default isMockAuthBypass
   ? mockMiddleware
   : withMiddlewareAuthRequired({
       returnTo: '/',
