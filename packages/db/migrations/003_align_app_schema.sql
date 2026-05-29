@@ -166,4 +166,3 @@ CREATE POLICY "Users can update own notifications" ON public.notifications FOR U
 CREATE POLICY "Users can view own subscription" ON public.subscriptions FOR SELECT USING (user_id = (SELECT auth.uid()));
 CREATE POLICY "Users can view own tags" ON public.tags FOR SELECT USING (owner_id = (SELECT auth.uid()));
 CREATE POLICY "Users can manage own tags" ON public.tags FOR ALL USING (owner_id = (SELECT auth.uid())) WITH CHECK (owner_id = (SELECT auth.uid()));
-
