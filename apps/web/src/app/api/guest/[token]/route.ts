@@ -16,9 +16,6 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
   const participant = mockParticipants.find((p: any) => p.id === guestToken.participantId);
   const template = meeting.ndaTemplateId ? mockTemplates.find((t: any) => t.id === meeting.ndaTemplateId) : null;
 
-  // Mark token as used
-  if (!guestToken.usedAt) guestToken.usedAt = new Date().toISOString();
-
   return NextResponse.json({
     guest: {
       email: guestToken.email,
