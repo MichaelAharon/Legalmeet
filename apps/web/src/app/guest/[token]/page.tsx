@@ -1,12 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useGuestAccess } from '@/hooks/useGuestAccess';
+import { NDASigningFlow } from '@/components/nda/NDASigningFlow';
 import { Shield, Clock, FileSignature, Video, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function GuestAccessPage() {
   const { token } = useParams<{ token: string }>();
   const { data, isLoading, error } = useGuestAccess(token);
+  const [showSigning, setShowSigning] = useState(false);
+  const [signed, setSigned] = useState(false);
 
   if (isLoading) {
     return (
@@ -33,6 +37,7 @@ export default function GuestAccessPage() {
   }
 
   const { guest, meeting } = data;
+  const hasSignedNDA = meeting.hasSignedNDA || signed;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
@@ -80,7 +85,7 @@ export default function GuestAccessPage() {
             <div className="flex items-center gap-2 mb-4">
               <FileSignature className="h-5 w-5 text-indigo-500" />
               <h3 className="font-medium text-slate-900 dark:text-white">Non-Disclosure Agreement</h3>
-              {meeting.hasSignedNDA ? (
+              {hasSignedNDA ? (
                 <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                   <CheckCircle className="h-3 w-3" />Signed
                 </span>
@@ -95,10 +100,29 @@ export default function GuestAccessPage() {
               </div>
             )}
 
-            {!meeting.hasSignedNDA && (
-              <button className="w-full py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium">
+            {!hasSignedNDA && !showSigning && (
+              <button
+                onClick={() => setShowSigning(true)}
+                className="w-full py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium"
+              >
                 Review & Sign NDA
               </button>
+            )}
+
+            {!hasSignedNDA && showSigning && meeting.ndaContent && (
+              <NDASigningFlow
+                meetingId={meeting.id}
+                templateContent={meeting.ndaContent}
+                templateName="Meeting NDA"
+                participantId={guest.participantId}
+                signerName={guest.displayName}
+                signerEmail={guest.email}
+                guestToken={token}
+                onComplete={() => {
+                  setSigned(true);
+                  setShowSigning(false);
+                }}
+              />
             )}
           </div>
         )}
@@ -110,10 +134,10 @@ export default function GuestAccessPage() {
             <h3 className="font-medium text-slate-900 dark:text-white">Join Meeting</h3>
           </div>
           <button
-            disabled={meeting.ndaRequired && !meeting.hasSignedNDA}
+            disabled={meeting.ndaRequired && !hasSignedNDA}
             className="w-full py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {meeting.ndaRequired && !meeting.hasSignedNDA ? 'Sign NDA to join' : 'Join Video Call'}
+            {meeting.ndaRequired && !hasSignedNDA ? 'Sign NDA to join' : 'Join Video Call'}
           </button>
         </div>
       </div>

@@ -24,5 +24,5 @@ export default isMock
     });
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth|api/health|api/guest|meeting-link|api/recordings/webhook).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth|api/health|api/guest|api/nda/sign|meeting-link|api/recordings/webhook).*)'],
 };

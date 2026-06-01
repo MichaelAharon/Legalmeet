@@ -40,7 +40,7 @@ export function useCreateNDATemplate() {
 export function useSignNDA() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { meetingId: string; participantId?: string; signatureData: string; signerName: string; signerEmail: string }) => {
+    mutationFn: async (data: { meetingId: string; participantId?: string; signatureData: string; signerName: string; signerEmail: string; guestToken?: string }) => {
       const res = await fetch('/api/nda/sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       if (!res.ok) throw new Error('Failed to sign NDA');
       return res.json();
