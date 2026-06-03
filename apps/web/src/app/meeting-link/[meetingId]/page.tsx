@@ -1,13 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Users, FileText, Video } from 'lucide-react';
-import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@legalmeet/ui';
+import { Calendar, Users, FileText, Video, Shield } from 'lucide-react';
+import { Button, Card, CardHeader, CardTitle, CardContent } from '@legalmeet/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useNDASignatureStatus } from '@/hooks/useNDA';
-import { NDASigningFlow } from '@/components/nda/NDASigningFlow';
 import { SignatureStatusTracker } from '@/components/nda/SignatureStatusTracker';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 
@@ -16,10 +14,6 @@ export default function MeetingLinkPage() {
   const meetingId = params.meetingId as string;
   const { data: meeting, isLoading: meetingLoading } = useMeeting(meetingId);
   const { data: sigStatus, isLoading: sigLoading } = useNDASignatureStatus(meetingId);
-
-  const [selectedParticipantId, setSelectedParticipantId] = useState('');
-  const [showSigning, setShowSigning] = useState(false);
-  const [signed, setSigned] = useState(false);
 
   if (meetingLoading || sigLoading) {
     return (
@@ -39,7 +33,6 @@ export default function MeetingLinkPage() {
 
   const participants = meeting.participants || [];
   const unsignedParticipants = participants.filter((p: any) => !p.ndaSignedAt && p.role !== 'host');
-  const selectedParticipant = participants.find((p: any) => p.id === selectedParticipantId);
   const allSigned = sigStatus?.allSigned || false;
   const ndaContent = meeting.ndaCustomizedContent || '';
 
@@ -102,54 +95,19 @@ export default function MeetingLinkPage() {
           </CardContent>
         </Card>
 
-        {/* Sign NDA */}
-        {!allSigned && !signed && unsignedParticipants.length > 0 && (
+        {/* Signing requires a participant-specific invitation token. */}
+        {!allSigned && unsignedParticipants.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Sign the NDA</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-indigo-500" />
+                Secure signature required
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!showSigning ? (
-                <>
-                  <p className="text-sm text-slate-500">Select your name to sign the NDA:</p>
-                  <Select value={selectedParticipantId} onValueChange={setSelectedParticipantId}>
-                    <SelectTrigger><SelectValue placeholder="Select your name" /></SelectTrigger>
-                    <SelectContent>
-                      {unsignedParticipants.map((p: any) => (
-                        <SelectItem key={p.id} value={p.id}>{p.displayName || p.email} ({p.email})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedParticipantId && (
-                    <Button onClick={() => setShowSigning(true)}>
-                      Review & Sign NDA
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <NDASigningFlow
-                  meetingId={meetingId}
-                  templateContent={ndaContent}
-                  templateName="Meeting NDA"
-                  participantId={selectedParticipantId}
-                  signerName={selectedParticipant?.displayName || 'Participant'}
-                  signerEmail={selectedParticipant?.email || ''}
-                  onComplete={() => {
-                    setSigned(true);
-                    setShowSigning(false);
-                  }}
-                />
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Signed confirmation */}
-        {signed && !allSigned && (
-          <Card>
-            <CardContent className="py-6 text-center">
-              <p className="text-emerald-600 font-medium">You have signed the NDA.</p>
-              <p className="text-sm text-slate-500 mt-1">Waiting for other participants to sign before the meeting can begin.</p>
+              <p className="text-sm text-slate-500">
+                To protect each participant&apos;s legal signature, use the unique invitation link sent to your email to review and sign this NDA.
+              </p>
             </CardContent>
           </Card>
         )}
