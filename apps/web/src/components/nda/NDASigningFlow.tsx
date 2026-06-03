@@ -13,10 +13,11 @@ interface NDASigningFlowProps {
   participantId?: string;
   signerName?: string;
   signerEmail?: string;
+  guestToken?: string;
   onComplete: () => void;
 }
 
-export function NDASigningFlow({ meetingId, templateContent, templateName, participantId, signerName = 'Demo User', signerEmail = 'demo@legalmeet.com', onComplete }: NDASigningFlowProps) {
+export function NDASigningFlow({ meetingId, templateContent, templateName, participantId, signerName = 'Demo User', signerEmail = 'demo@legalmeet.com', guestToken, onComplete }: NDASigningFlowProps) {
   const [step, setStep] = useState(0);
   const [agreed, setAgreed] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export function NDASigningFlow({ meetingId, templateContent, templateName, parti
       signatureData,
       signerName,
       signerEmail,
+      guestToken,
     });
     onComplete();
   };
