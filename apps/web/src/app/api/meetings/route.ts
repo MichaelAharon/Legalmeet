@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../lib/db';
+import { requireCurrentProfile } from '../lib/auth';
 import { mockMeetings, mockParticipants, mockProjects } from '../lib/mock-store';
 
 export async function GET(request: NextRequest) {
@@ -19,9 +20,22 @@ export async function GET(request: NextRequest) {
   }
 
   const db = getDb();
+  const auth = await requireCurrentProfile(db);
+  if (auth.response) return auth.response;
+
+  const { data: participantMeetings, error: participantErr } = await db
+    .from('meeting_participants')
+    .select('meeting_id')
+    .eq('user_id', auth.profile.id);
+  if (participantErr) return NextResponse.json({ error: participantErr.message }, { status: 500 });
+
+  const participantMeetingIds = [...new Set((participantMeetings || []).map((p) => p.meeting_id))];
   let query = db.from('meetings').select('*, meeting_participants(*)');
   if (projectId) query = query.eq('project_id', projectId);
   if (status) query = query.eq('status', status);
+  query = participantMeetingIds.length > 0
+    ? query.or(`host_id.eq.${auth.profile.id},id.in.(${participantMeetingIds.join(',')})`)
+    : query.eq('host_id', auth.profile.id);
   const { data, error } = await query.order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -99,21 +113,43 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
+    const auth = await requireCurrentProfile(db);
+    if (auth.response) return auth.response;
+
     // Create project inline if requested
     let projectId = body.projectId || null;
     if (body.newProjectName) {
-      const { data: proj } = await db.from('projects').insert({
-        owner_id: 'mock-user-001',
+      const { data: proj, error: projectErr } = await db.from('projects').insert({
+        owner_id: auth.profile.id,
         name: body.newProjectName,
         description: body.newProjectDescription || null,
       }).select().single();
+      if (projectErr) return NextResponse.json({ error: projectErr.message }, { status: 500 });
       projectId = proj?.id || null;
+    } else if (projectId) {
+      const { data: project, error: projectErr } = await db
+        .from('projects')
+        .select('id, owner_id')
+        .eq('id', projectId)
+        .single();
+      if (projectErr || !project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+
+      if (project.owner_id !== auth.profile.id) {
+        const { data: membership, error: memberErr } = await db
+          .from('project_members')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('user_id', auth.profile.id)
+          .maybeSingle();
+        if (memberErr) return NextResponse.json({ error: memberErr.message }, { status: 500 });
+        if (!membership) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      }
     }
 
     const { data: meeting, error } = await db.from('meetings').insert({
       project_id: projectId,
       sub_project_id: body.subProjectId || null,
-      host_id: 'mock-user-001',
+      host_id: auth.profile.id,
       title: body.title,
       description: body.description || null,
       scheduled_at: body.scheduledAt || new Date().toISOString(),
@@ -127,9 +163,9 @@ export async function POST(request: NextRequest) {
     // Add host as participant
     await db.from('meeting_participants').insert({
       meeting_id: meeting.id,
-      user_id: 'mock-user-001',
-      email: 'demo@legalmeet.com',
-      display_name: 'Demo User',
+      user_id: auth.profile.id,
+      email: auth.profile.email,
+      display_name: auth.profile.fullName || auth.profile.email,
       role: 'host',
     });
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
+import { requireCurrentProfile } from '../../lib/auth';
+import { canViewMeeting } from '../../lib/authorization';
 import { mockMeetings, mockParticipants } from '../../lib/mock-store';
 
 export async function GET(_req: NextRequest, { params }: { params: { meetingId: string } }) {
@@ -11,8 +13,13 @@ export async function GET(_req: NextRequest, { params }: { params: { meetingId: 
   }
 
   const db = getDb();
+  const auth = await requireCurrentProfile(db);
+  if (auth.response) return auth.response;
+
   const { data, error } = await db.from('meetings').select('*, meeting_participants(*)').eq('id', params.meetingId).single();
   if (error || !data) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+  if (!canViewMeeting(data, auth.profile.id)) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+
   const { meeting_participants, ...meeting } = data;
   return NextResponse.json({
     ...toCamel(meeting),
@@ -31,6 +38,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { meetin
   }
 
   const db = getDb();
+  const auth = await requireCurrentProfile(db);
+  if (auth.response) return auth.response;
+
   const body = await request.json();
   // Map camelCase body to snake_case columns
   const updates: Record<string, unknown> = {};
@@ -46,7 +56,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { meetin
     if (body[camel] !== undefined) updates[snake] = body[camel];
   }
   const { data, error } = await db.from('meetings').update(updates)
-    .eq('id', params.meetingId).select('*, meeting_participants(*)').single();
+    .eq('id', params.meetingId).eq('host_id', auth.profile.id).select('*, meeting_participants(*)').maybeSingle();
   if (error || !data) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
   const { meeting_participants, ...meeting } = data;
   return NextResponse.json({
@@ -64,7 +74,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: { meetingI
   }
 
   const db = getDb();
-  const { error } = await db.from('meetings').delete().eq('id', params.meetingId);
+  const auth = await requireCurrentProfile(db);
+  if (auth.response) return auth.response;
+
+  const { data, error } = await db.from('meetings').delete()
+    .eq('id', params.meetingId)
+    .eq('host_id', auth.profile.id)
+    .select('id')
+    .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
   return NextResponse.json({ success: true });
 }
