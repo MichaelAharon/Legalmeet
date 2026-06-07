@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --test --experimental-strip-types test/meeting-authorization.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
