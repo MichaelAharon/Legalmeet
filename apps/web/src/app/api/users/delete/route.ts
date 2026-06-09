@@ -23,7 +23,7 @@ import {
   mockTemplates,
   mockTranscripts,
 } from '../../lib/mock-store';
-import { clearMockUserData, deleteSupabaseUserData } from './delete-user-data';
+import { clearMockUserData, deleteSupabaseUserData, type UserDeletionDb } from './delete-user-data';
 
 export async function POST() {
   if (useMock()) {
@@ -57,7 +57,7 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const result = await deleteSupabaseUserData(getDb(), session.user.email);
+  const result = await deleteSupabaseUserData(getDb() as unknown as UserDeletionDb, session.user.email);
   if (!result.success) {
     return NextResponse.json({ error: result.message }, { status: result.status });
   }
