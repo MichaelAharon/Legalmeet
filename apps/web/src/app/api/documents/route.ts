@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../lib/db';
+import { getAccessibleMeetingIds, requireApiUser } from '../lib/auth';
 import { mockSignatures, mockRecordings, mockTranscripts, mockBundles, mockMeetings } from '../lib/mock-store';
 
 export async function GET(request: NextRequest) {
@@ -57,16 +58,22 @@ export async function GET(request: NextRequest) {
 
   // --- Real Supabase ---
   const db = getDb();
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
 
-  // Get relevant meeting IDs
-  let meetingIds: string[] = [];
+  // Get relevant meeting IDs, limited to meetings visible to the current profile.
+  const accessibleMeetingIds = await getAccessibleMeetingIds(db, auth.user.id);
+  if (!accessibleMeetingIds.length) return NextResponse.json([]);
+
+  let meetingIds = [...accessibleMeetingIds];
   if (meetingId) {
-    meetingIds = [meetingId];
-  } else {
-    let meetingQuery = db.from('meetings').select('id');
+    meetingIds = accessibleMeetingIds.includes(meetingId) ? [meetingId] : [];
+  } else if (subProjectId || projectId) {
+    let meetingQuery = db.from('meetings').select('id').in('id', accessibleMeetingIds);
     if (subProjectId) meetingQuery = meetingQuery.eq('sub_project_id', subProjectId);
     else if (projectId) meetingQuery = meetingQuery.eq('project_id', projectId);
-    const { data: meetings } = await meetingQuery;
+    const { data: meetings, error: meetingsError } = await meetingQuery;
+    if (meetingsError) return NextResponse.json({ error: meetingsError.message }, { status: 500 });
     meetingIds = (meetings || []).map((m: any) => m.id);
   }
 

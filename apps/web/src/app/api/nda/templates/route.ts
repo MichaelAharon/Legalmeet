@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
+import { requireApiUser } from '../../lib/auth';
 import { mockTemplates } from '../../lib/mock-store';
 
 export async function GET() {
   if (useMock()) return NextResponse.json(mockTemplates);
 
   const db = getDb();
-  const { data, error } = await db.from('nda_templates').select('*').order('created_at', { ascending: false });
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
+  const { data, error } = await db.from('nda_templates').select('*')
+    .or(`owner_id.eq.${auth.user.id},is_default.eq.true`)
+    .order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data.map(toCamel));
 }
@@ -34,8 +40,11 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
+    const auth = await requireApiUser(db);
+    if (auth.response) return auth.response;
+
     const { data, error } = await db.from('nda_templates').insert({
-      owner_id: 'mock-user-001',
+      owner_id: auth.user.id,
       name: body.name,
       content: body.content,
       template_vars: body.templateVars || [],

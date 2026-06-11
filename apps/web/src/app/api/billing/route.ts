@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../lib/db';
+import { requireApiUser } from '../lib/auth';
 import { mockSubscriptions } from '../lib/mock-store';
 
 export async function GET() {
@@ -10,7 +11,10 @@ export async function GET() {
   }
 
   const db = getDb();
-  const { data } = await db.from('subscriptions').select('*').single();
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
+  const { data } = await db.from('subscriptions').select('*').eq('user_id', auth.user.id).maybeSingle();
   if (!data) return NextResponse.json(null);
   return NextResponse.json(toCamel(data));
 }
@@ -44,7 +48,10 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getDb();
-    await db.from('subscriptions').update({ status: 'canceled' }).eq('user_id', 'mock-user-001');
+    const auth = await requireApiUser(db);
+    if (auth.response) return auth.response;
+
+    await db.from('subscriptions').update({ status: 'canceled' }).eq('user_id', auth.user.id);
     return NextResponse.json({ success: true });
   }
 

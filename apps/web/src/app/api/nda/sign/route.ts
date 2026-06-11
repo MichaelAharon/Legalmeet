@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
+import { requireApiUser } from '../../lib/auth';
 import { mockSignatures, mockMeetings, mockTemplates, mockParticipants } from '../../lib/mock-store';
 
 export async function POST(request: NextRequest) {
@@ -51,6 +52,11 @@ export async function POST(request: NextRequest) {
 
     // --- Real Supabase path ---
     const db = getDb();
+    const auth = await requireApiUser(db);
+    if (auth.response) return auth.response;
+    if (signerEmail !== auth.user.email) {
+      return NextResponse.json({ error: 'Signer email does not match authenticated user' }, { status: 403 });
+    }
 
     const { data: meeting } = await db.from('meetings').select('*, nda_templates(*)').eq('id', meetingId).single();
     if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
@@ -59,12 +65,29 @@ export async function POST(request: NextRequest) {
     const signedAt = new Date().toISOString();
     const ndaContent = meeting.nda_customized_content || template?.content || '';
 
-    // Resolve participant
-    let resolvedPid = participantId;
-    if (!resolvedPid) {
-      const { data: p } = await db.from('meeting_participants').select('id')
-        .eq('meeting_id', meetingId).eq('email', signerEmail).single();
-      resolvedPid = p?.id || crypto.randomUUID();
+    let participant: any = null;
+    if (participantId) {
+      const { data: requestedParticipant } = await db.from('meeting_participants').select('id, email, user_id')
+        .eq('id', participantId).eq('meeting_id', meetingId).maybeSingle();
+      participant = requestedParticipant;
+    } else {
+      const byUser = await db.from('meeting_participants').select('id, email, user_id')
+        .eq('meeting_id', meetingId).eq('user_id', auth.user.id).maybeSingle();
+      if (byUser.error) return NextResponse.json({ error: byUser.error.message }, { status: 500 });
+      participant = byUser.data;
+      if (!participant) {
+        const byEmail = await db.from('meeting_participants').select('id, email, user_id')
+          .eq('meeting_id', meetingId).eq('email', auth.user.email).limit(2);
+        if (byEmail.error) return NextResponse.json({ error: byEmail.error.message }, { status: 500 });
+        if ((byEmail.data || []).length > 1) {
+          return NextResponse.json({ error: 'Participant is ambiguous' }, { status: 403 });
+        }
+        participant = byEmail.data?.[0] || null;
+      }
+    }
+
+    if (!participant || (participant.user_id && participant.user_id !== auth.user.id) || participant.email !== auth.user.email) {
+      return NextResponse.json({ error: 'Participant not found' }, { status: 404 });
     }
 
     // Create hash
@@ -78,7 +101,7 @@ export async function POST(request: NextRequest) {
     // Insert signature
     const { data: signature, error: sigErr } = await db.from('nda_signatures').insert({
       meeting_id: meetingId,
-      participant_id: resolvedPid,
+      participant_id: participant.id,
       template_id: template?.id || '',
       nda_content_snapshot: ndaContent,
       signature_data: signatureData,
@@ -93,7 +116,7 @@ export async function POST(request: NextRequest) {
     if (sigErr) return NextResponse.json({ error: sigErr.message }, { status: 500 });
 
     // Update participant nda_signed_at
-    await db.from('meeting_participants').update({ nda_signed_at: signedAt }).eq('id', resolvedPid);
+    await db.from('meeting_participants').update({ nda_signed_at: signedAt }).eq('id', participant.id).eq('meeting_id', meetingId);
 
     // Check if all participants have signed
     const { data: allParts } = await db.from('meeting_participants').select('nda_signed_at').eq('meeting_id', meetingId);
