@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../../lib/db';
+import { requireApiUser } from '../../../lib/auth';
 import { mockTemplates } from '../../../lib/mock-store';
 
 export async function GET(_req: NextRequest, { params }: { params: { templateId: string } }) {
@@ -10,7 +11,13 @@ export async function GET(_req: NextRequest, { params }: { params: { templateId:
   }
 
   const db = getDb();
-  const { data, error } = await db.from('nda_templates').select('*').eq('id', params.templateId).single();
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
+  const { data, error } = await db.from('nda_templates').select('*')
+    .eq('id', params.templateId)
+    .or(`owner_id.eq.${auth.user.id},is_default.eq.true`)
+    .single();
   if (error || !data) return NextResponse.json({ error: 'Template not found' }, { status: 404 });
   return NextResponse.json(toCamel(data));
 }
@@ -25,6 +32,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { templa
   }
 
   const db = getDb();
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
   const body = await request.json();
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates.name = body.name;
@@ -34,7 +44,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { templa
   if (body.category !== undefined) updates.category = body.category;
 
   const { data, error } = await db.from('nda_templates').update(updates)
-    .eq('id', params.templateId).select().single();
+    .eq('id', params.templateId).eq('owner_id', auth.user.id).select().single();
   if (error || !data) return NextResponse.json({ error: 'Template not found' }, { status: 404 });
   return NextResponse.json(toCamel(data));
 }
@@ -48,7 +58,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: { template
   }
 
   const db = getDb();
-  const { error } = await db.from('nda_templates').delete().eq('id', params.templateId);
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
+  const { data, error } = await db.from('nda_templates').delete()
+    .eq('id', params.templateId).eq('owner_id', auth.user.id).select('id').maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: 'Template not found' }, { status: 404 });
   return NextResponse.json({ success: true });
 }

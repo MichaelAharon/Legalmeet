@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../lib/db';
+import { requireApiUser } from '../lib/auth';
 import { mockNotifications } from '../lib/mock-store';
 
 export async function GET(req: NextRequest) {
@@ -15,7 +16,10 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getDb();
-  let query = db.from('notifications').select('*').order('created_at', { ascending: false });
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
+  let query = db.from('notifications').select('*').eq('user_id', auth.user.id).order('created_at', { ascending: false });
   if (unreadOnly) query = query.eq('read', false);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -38,12 +42,15 @@ export async function PATCH(req: NextRequest) {
   }
 
   const db = getDb();
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
   if (id === 'all') {
-    await db.from('notifications').update({ read: true }).eq('read', false);
+    await db.from('notifications').update({ read: true }).eq('user_id', auth.user.id).eq('read', false);
     return NextResponse.json({ success: true });
   }
   const { data, error } = await db.from('notifications').update({ read: read !== undefined ? read : true })
-    .eq('id', id).select().single();
+    .eq('id', id).eq('user_id', auth.user.id).select().single();
   if (error || !data) return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
   return NextResponse.json(toCamel(data));
 }

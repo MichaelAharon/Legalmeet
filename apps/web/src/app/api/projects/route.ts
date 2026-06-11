@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../lib/db';
+import { getAccessibleProjectIds, requireApiUser } from '../lib/auth';
 import { mockProjects } from '../lib/mock-store';
 
 export async function GET() {
   if (useMock()) return NextResponse.json(mockProjects);
 
   const db = getDb();
-  const { data, error } = await db.from('projects').select('*').order('created_at', { ascending: false });
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+
+  const projectIds = await getAccessibleProjectIds(db, auth.user.id);
+  if (!projectIds.length) return NextResponse.json([]);
+
+  const { data, error } = await db.from('projects').select('*').in('id', projectIds).order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data.map(toCamel));
 }
@@ -34,8 +41,11 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
+    const auth = await requireApiUser(db);
+    if (auth.response) return auth.response;
+
     const { data, error } = await db.from('projects').insert({
-      owner_id: 'mock-user-001', // TODO: replace with auth.uid()
+      owner_id: auth.user.id,
       name: body.name,
       description: body.description || null,
     }).select().single();

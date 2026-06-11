@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../../lib/db';
+import { canAccessProject, isProjectOwner, requireApiUser } from '../../../lib/auth';
 import { mockSubProjects } from '../../../lib/mock-store';
 
 export async function GET(_req: NextRequest, { params }: { params: { projectId: string } }) {
@@ -9,6 +10,12 @@ export async function GET(_req: NextRequest, { params }: { params: { projectId: 
   }
 
   const db = getDb();
+  const auth = await requireApiUser(db);
+  if (auth.response) return auth.response;
+  if (!(await canAccessProject(db, auth.user.id, params.projectId))) {
+    return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+  }
+
   const { data, error } = await db.from('sub_projects').select('*')
     .eq('project_id', params.projectId).order('created_at', { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -36,6 +43,12 @@ export async function POST(request: NextRequest, { params }: { params: { project
     }
 
     const db = getDb();
+    const auth = await requireApiUser(db);
+    if (auth.response) return auth.response;
+    if (!(await isProjectOwner(db, auth.user.id, params.projectId))) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
     const { data, error } = await db.from('sub_projects').insert({
       project_id: params.projectId,
       parent_sub_project_id: body.parentSubProjectId || null,
