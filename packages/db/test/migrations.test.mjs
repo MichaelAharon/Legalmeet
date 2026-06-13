@@ -78,4 +78,3 @@ test('signed NDA records are protected from destructive cascades', async () => {
     'expected signed NDAs to survive attempted participant deletion',
   );
 });
-

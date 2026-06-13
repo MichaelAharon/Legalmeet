@@ -229,4 +229,3 @@ CREATE POLICY "Users can manage own resource tags" ON public.resource_tags FOR A
 CREATE POLICY "Users can view own subscriptions" ON public.subscriptions FOR SELECT USING (user_id = (SELECT auth.uid()));
 CREATE POLICY "Users can update own subscriptions" ON public.subscriptions FOR UPDATE
   USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
-
