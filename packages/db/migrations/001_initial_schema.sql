@@ -106,8 +106,8 @@ CREATE INDEX idx_participants_user ON public.meeting_participants(user_id);
 -- NDA SIGNATURES (immutable legal records)
 CREATE TABLE public.nda_signatures (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  meeting_id      UUID NOT NULL REFERENCES public.meetings(id) ON DELETE CASCADE,
-  participant_id  UUID NOT NULL REFERENCES public.meeting_participants(id) ON DELETE CASCADE,
+  meeting_id      UUID NOT NULL REFERENCES public.meetings(id) ON DELETE RESTRICT,
+  participant_id  UUID NOT NULL REFERENCES public.meeting_participants(id) ON DELETE RESTRICT,
   template_id     UUID NOT NULL REFERENCES public.nda_templates(id) ON DELETE RESTRICT,
   nda_content_snapshot TEXT NOT NULL,
   signature_data  TEXT NOT NULL,
