@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withMiddlewareAuthRequired } from '@auth0/nextjs-auth0/edge';
+import { shouldUseMockServices } from '@/lib/mock-mode';
 
-const isMock = process.env.USE_MOCK_SERVICES === 'true' || process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+const shouldBypassAuthForMock = shouldUseMockServices();
 
 function addSecurityHeaders(response: NextResponse) {
   response.headers.set('x-request-id', crypto.randomUUID());
@@ -16,8 +17,8 @@ function mockMiddleware(request: NextRequest) {
   return addSecurityHeaders(NextResponse.next());
 }
 
-// In mock mode, skip Auth0 entirely
-export default isMock
+// Local mock development can skip Auth0, but production must always require Auth0.
+export default shouldBypassAuthForMock
   ? mockMiddleware
   : withMiddlewareAuthRequired({
       returnTo: '/',
