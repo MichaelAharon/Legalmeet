@@ -99,7 +99,7 @@ export type NDASignature = {
   id: string;
   meeting_id: string;
   participant_id: string;
-  template_id: string;
+  template_id: string | null;
   nda_content_snapshot: string;
   signature_data: string;
   signature_hash: string;

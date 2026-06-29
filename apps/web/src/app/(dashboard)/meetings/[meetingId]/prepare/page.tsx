@@ -45,13 +45,21 @@ export default function PrepareMeetingPage() {
   const handleSigningComplete = async () => {
     setHostSigned(true);
     setShowSigning(false);
-    // Update meeting with customized NDA content and host signature
+    await updateMeeting.mutateAsync({
+      id: meetingId,
+      hostSignedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleProceedToSign = async () => {
+    if (!selectedTemplateId || !ndaContent.trim()) return;
+
     await updateMeeting.mutateAsync({
       id: meetingId,
       ndaCustomizedContent: ndaContent,
-      hostSignedAt: new Date().toISOString(),
       ndaTemplateId: selectedTemplateId === 'custom' ? null : selectedTemplateId,
     });
+    setShowSigning(true);
   };
 
   const handleSendInvites = async () => {
@@ -167,8 +175,8 @@ export default function PrepareMeetingPage() {
 
               {selectedTemplateId && ndaContent && (
                 <div className="flex justify-end">
-                  <Button onClick={() => setShowSigning(true)}>
-                    Proceed to Sign
+                  <Button onClick={handleProceedToSign} disabled={updateMeeting.isPending}>
+                    {updateMeeting.isPending ? 'Saving...' : 'Proceed to Sign'}
                   </Button>
                 </div>
               )}
