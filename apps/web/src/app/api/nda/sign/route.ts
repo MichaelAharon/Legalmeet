@@ -14,9 +14,13 @@ export async function POST(request: NextRequest) {
     if (useMock()) {
       const meeting = mockMeetings.find(m => m.id === meetingId);
       if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
-      const template = mockTemplates.find(t => t.id === meeting.ndaTemplateId) || mockTemplates[0];
+      const template = meeting.ndaTemplateId ? mockTemplates.find(t => t.id === meeting.ndaTemplateId) : null;
       const signedAt = new Date().toISOString();
-      const hashInput = `${template.content}|${signatureData}|${signedAt}`;
+      const ndaContent = meeting.ndaCustomizedContent || template?.content;
+      if (!ndaContent) {
+        return NextResponse.json({ error: 'Meeting NDA content is not prepared' }, { status: 409 });
+      }
+      const hashInput = `${ndaContent}|${signatureData}|${signedAt}`;
       let hash = 0;
       for (let i = 0; i < hashInput.length; i++) {
         hash = ((hash << 5) - hash) + hashInput.charCodeAt(i);
@@ -29,10 +33,9 @@ export async function POST(request: NextRequest) {
       }
       const participant = mockParticipants.find(p => p.id === resolvedParticipantId);
       if (participant) participant.ndaSignedAt = signedAt;
-      const ndaContent = meeting.ndaCustomizedContent || template.content;
       const signature = {
         id: crypto.randomUUID(),
-        meetingId, participantId: resolvedParticipantId, templateId: template.id,
+        meetingId, participantId: resolvedParticipantId, templateId: template?.id ?? null,
         ndaContentSnapshot: ndaContent, signatureData,
         signatureHash: Math.abs(hash).toString(16).padStart(16, '0'),
         signerEmail, signerName, signerIp: '127.0.0.1',
@@ -55,9 +58,12 @@ export async function POST(request: NextRequest) {
     const { data: meeting } = await db.from('meetings').select('*, nda_templates(*)').eq('id', meetingId).single();
     if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
 
-    const template = meeting.nda_templates || (await db.from('nda_templates').select('*').limit(1).single()).data;
+    const template = meeting.nda_templates;
     const signedAt = new Date().toISOString();
-    const ndaContent = meeting.nda_customized_content || template?.content || '';
+    const ndaContent = meeting.nda_customized_content || template?.content;
+    if (!ndaContent) {
+      return NextResponse.json({ error: 'Meeting NDA content is not prepared' }, { status: 409 });
+    }
 
     // Resolve participant
     let resolvedPid = participantId;
@@ -79,7 +85,7 @@ export async function POST(request: NextRequest) {
     const { data: signature, error: sigErr } = await db.from('nda_signatures').insert({
       meeting_id: meetingId,
       participant_id: resolvedPid,
-      template_id: template?.id || '',
+      template_id: template?.id ?? null,
       nda_content_snapshot: ndaContent,
       signature_data: signatureData,
       signature_hash: Math.abs(hash).toString(16).padStart(16, '0'),
