@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withMiddlewareAuthRequired } from '@auth0/nextjs-auth0/edge';
+import { isMockModeEnabled } from './lib/mock-mode';
 
-const isMock = process.env.USE_MOCK_SERVICES === 'true' || process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+const isMock = isMockModeEnabled();
 
 function addSecurityHeaders(response: NextResponse) {
   response.headers.set('x-request-id', crypto.randomUUID());

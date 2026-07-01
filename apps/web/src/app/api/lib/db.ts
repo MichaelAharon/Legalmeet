@@ -1,7 +1,8 @@
 import { getSupabaseServer } from '@/lib/supabase/server';
+import { isMockModeEnabled } from '@/lib/mock-mode';
 
 export function useMock() {
-  return process.env.USE_MOCK_SERVICES === 'true' || process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+  return isMockModeEnabled();
 }
 
 export function getDb() {
