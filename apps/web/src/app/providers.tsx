@@ -5,7 +5,7 @@ import { UserProvider } from '@auth0/nextjs-auth0/client';
 import { Toaster } from 'sonner';
 import { useState, useEffect } from 'react';
 
-const isMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+const isMock = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_USE_MOCK === 'true';
 
 function ThemeScript() {
   useEffect(() => {
