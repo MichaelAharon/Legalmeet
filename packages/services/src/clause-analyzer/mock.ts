@@ -1,4 +1,4 @@
-import type { IClauseAnalyzerService, ClauseAnalysisInput, ClauseAnalysisOutput } from './interface';
+import type { IClauseAnalyzerService, ClauseAnalysisInput, ClauseAnalysisOutput, ClauseRiskResult } from './interface';
 
 export class MockClauseAnalyzerService implements IClauseAnalyzerService {
   async analyzeNDA(input: ClauseAnalysisInput): Promise<ClauseAnalysisOutput> {
@@ -8,7 +8,7 @@ export class MockClauseAnalyzerService implements IClauseAnalyzerService {
     const hasGoverningLaw = input.ndaContent.toLowerCase().includes('governing law');
     const hasSurvival = input.ndaContent.toLowerCase().includes('survival');
 
-    const risks = [];
+    const risks: ClauseRiskResult[] = [];
 
     if (hasNonCompete) {
       risks.push({
@@ -38,7 +38,7 @@ export class MockClauseAnalyzerService implements IClauseAnalyzerService {
       suggestion: null,
     });
 
-    const missingClauses = [];
+    const missingClauses: string[] = [];
     if (!input.ndaContent.toLowerCase().includes('indemnif')) missingClauses.push('Indemnification clause');
     if (!input.ndaContent.toLowerCase().includes('force majeure')) missingClauses.push('Force majeure clause');
     if (!hasSurvival) missingClauses.push('Explicit survival period after termination');
