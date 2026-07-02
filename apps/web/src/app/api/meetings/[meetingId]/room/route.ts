@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createVideoService } from '@legalmeet/services';
+import { DailyVideoService } from '@legalmeet/services/src/video/daily';
+import { MockVideoService } from '@legalmeet/services/src/video/mock';
 import { useMock, getDb } from '../../../lib/db';
 import { mockMeetings } from '../../../lib/mock-store';
+
+function createRoomVideoService() {
+  return process.env.DAILY_API_KEY
+    ? new DailyVideoService(process.env.DAILY_API_KEY)
+    : new MockVideoService();
+}
 
 export async function POST(_req: NextRequest, { params }: { params: { meetingId: string } }) {
   if (useMock()) {
@@ -29,7 +36,7 @@ export async function POST(_req: NextRequest, { params }: { params: { meetingId:
     return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
   }
 
-  const video = createVideoService();
+  const video = createRoomVideoService();
   const startedAt = new Date().toISOString();
   const existingRoomName = meeting.room_name;
   const existingRoomUrl = meeting.room_url;
