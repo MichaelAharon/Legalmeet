@@ -41,6 +41,17 @@ function isRecordingReady(body: WebhookPayload) {
   return event === 'recording.ready' || event === 'recording.ready-to-download';
 }
 
+function hasValidWebhookSecret(request: NextRequest) {
+  const secret = process.env.RECORDING_WEBHOOK_SECRET;
+  if (!secret) return false;
+
+  const authorization = request.headers.get('authorization');
+  const bearerToken = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : null;
+  const headerSecret = request.headers.get('x-recording-webhook-secret') || request.headers.get('x-webhook-secret');
+
+  return bearerToken === secret || headerSecret === secret;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as WebhookPayload;
@@ -57,6 +68,10 @@ export async function POST(request: NextRequest) {
       const fileSizeBytes = numberValue(body.size, body.file_size, body.fileSizeBytes, payload.size, payload.file_size, payload.fileSizeBytes);
 
       if (!useMock()) {
+        if (!hasValidWebhookSecret(request)) {
+          return NextResponse.json({ error: 'Invalid recording webhook secret' }, { status: 401 });
+        }
+
         const db = getDb();
         let resolvedMeetingId = meetingId;
 
