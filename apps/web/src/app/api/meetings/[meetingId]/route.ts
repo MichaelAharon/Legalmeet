@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  getMeetingDeletionBlockedMessage,
+  getMeetingDeletionBlockers,
+  type MeetingDeletionArtifact,
+} from '@/lib/meeting-deletion-policy';
 import { useMock, getDb, toCamel } from '../../lib/db';
-import { mockMeetings, mockParticipants } from '../../lib/mock-store';
+import {
+  mockBundles,
+  mockMeetings,
+  mockParticipants,
+  mockRecordings,
+  mockSignatures,
+  mockTranscripts,
+} from '../../lib/mock-store';
 
 export async function GET(_req: NextRequest, { params }: { params: { meetingId: string } }) {
   if (useMock()) {
@@ -59,12 +71,77 @@ export async function DELETE(_req: NextRequest, { params }: { params: { meetingI
   if (useMock()) {
     const idx = mockMeetings.findIndex(m => m.id === params.meetingId);
     if (idx === -1) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    const blockers = getMeetingDeletionBlockers({
+      nda_signatures: mockSignatures.filter(s => s.meetingId === params.meetingId).length,
+      recordings: mockRecordings.filter(r => r.meetingId === params.meetingId).length,
+      transcripts: mockTranscripts.filter(t => t.meetingId === params.meetingId).length,
+      document_bundles: mockBundles.filter(b => b.meetingId === params.meetingId).length,
+    });
+    if (blockers.length > 0) {
+      return NextResponse.json(
+        { error: getMeetingDeletionBlockedMessage(blockers), blockers },
+        { status: 409 }
+      );
+    }
     mockMeetings.splice(idx, 1);
     return NextResponse.json({ success: true });
   }
 
   const db = getDb();
+  const { data: meeting, error: meetingError } = await db.from('meetings')
+    .select('id')
+    .eq('id', params.meetingId)
+    .single();
+  if (meetingError || !meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+
+  const artifactQueries: Array<{
+    artifact: MeetingDeletionArtifact;
+    query: PromiseLike<{ count: number | null; error: { message: string } | null }>;
+  }> = [
+    {
+      artifact: 'nda_signatures',
+      query: db.from('nda_signatures').select('id', { count: 'exact', head: true }).eq('meeting_id', params.meetingId),
+    },
+    {
+      artifact: 'recordings',
+      query: db.from('recordings').select('id', { count: 'exact', head: true }).eq('meeting_id', params.meetingId),
+    },
+    {
+      artifact: 'transcripts',
+      query: db.from('transcripts').select('id', { count: 'exact', head: true }).eq('meeting_id', params.meetingId),
+    },
+    {
+      artifact: 'document_bundles',
+      query: db.from('document_bundles').select('id', { count: 'exact', head: true }).eq('meeting_id', params.meetingId),
+    },
+  ];
+
+  const artifactResults = await Promise.all(artifactQueries.map(({ query }) => query));
+  const artifactError = artifactResults.find(result => result.error)?.error;
+  if (artifactError) return NextResponse.json({ error: artifactError.message }, { status: 500 });
+
+  const blockers = getMeetingDeletionBlockers(
+    Object.fromEntries(artifactQueries.map(({ artifact }, index) => [artifact, artifactResults[index].count]))
+  );
+  if (blockers.length > 0) {
+    return NextResponse.json(
+      { error: getMeetingDeletionBlockedMessage(blockers), blockers },
+      { status: 409 }
+    );
+  }
+
   const { error } = await db.from('meetings').delete().eq('id', params.meetingId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === '23503') {
+      return NextResponse.json(
+        {
+          error: getMeetingDeletionBlockedMessage(['nda_signatures']),
+          blockers: ['nda_signatures'],
+        },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ success: true });
 }
