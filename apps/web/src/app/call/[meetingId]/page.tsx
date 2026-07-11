@@ -12,7 +12,7 @@ import { useCallStore } from '@/stores/callStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useNDASignatureStatus } from '@/hooks/useNDA';
-import { getCallAccessState } from '@/lib/call-access';
+import { getCallAccessState } from '@/lib/call-access.mjs';
 
 export default function CallPage() {
   const params = useParams();

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getCallAccessState } from './call-access.js';
+import { getCallAccessState } from './call-access.mjs';
 
 test('allows calls for meetings that do not require an NDA', () => {
   assert.equal(
