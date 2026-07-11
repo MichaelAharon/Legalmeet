@@ -11,12 +11,15 @@ import { cn } from '@/lib/utils/cn';
 import { useCallStore } from '@/stores/callStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useMeeting } from '@/hooks/useMeeting';
+import { useNDASignatureStatus } from '@/hooks/useNDA';
+import { getCallAccessState } from '@/lib/call-access';
 
 export default function CallPage() {
   const params = useParams();
   const router = useRouter();
   const meetingId = params.meetingId as string;
-  const { data: meeting } = useMeeting(meetingId);
+  const { data: meeting, isLoading: meetingLoading, isError: meetingError } = useMeeting(meetingId);
+  const { data: signatureStatus, isLoading: signatureLoading, isError: signatureError } = useNDASignatureStatus(meetingId);
 
   const {
     isMicOn, isCameraOn, isScreenSharing, isRecording,
@@ -40,6 +43,17 @@ export default function CallPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const joinTimeRef = useRef<number>(0);
+  const mediaStartedRef = useRef(false);
+
+  const accessState = getCallAccessState({
+    meeting,
+    meetingLoading,
+    meetingError,
+    signatureStatus,
+    signatureLoading,
+    signatureError,
+  });
+  const canEnterCall = accessState === 'allowed';
 
   // Participants from meeting data (memoized to prevent infinite re-renders)
   const participants = useMemo(() => meeting?.participants || [], [meeting?.participants]);
@@ -48,6 +62,8 @@ export default function CallPage() {
   // ===== Initialize camera/mic =====
   useEffect(() => {
     let stream: MediaStream | null = null;
+    if (!canEnterCall || mediaStartedRef.current) return;
+    mediaStartedRef.current = true;
 
     async function initMedia() {
       try {
@@ -81,7 +97,7 @@ export default function CallPage() {
         stream.getTracks().forEach(t => t.stop());
       }
     };
-  }, []);
+  }, [canEnterCall]);
 
   // ===== Timer =====
   useEffect(() => {
@@ -268,6 +284,48 @@ export default function CallPage() {
     const s = secs % 60;
     if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  if (accessState === 'checking') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin h-8 w-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-lg font-medium">Checking meeting access...</p>
+          <p className="text-sm text-slate-400 mt-1">Verifying NDA signature status before joining</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessState === 'not_found') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-white text-center max-w-md px-6">
+          <p className="text-lg font-medium">Meeting not found</p>
+          <p className="text-sm text-slate-400 mt-2">This meeting link is invalid or no longer available.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessState === 'blocked') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-white text-center max-w-md px-6">
+          <p className="text-lg font-medium">NDA signatures required</p>
+          <p className="text-sm text-slate-400 mt-2">
+            This meeting cannot be joined until all required NDA signatures are complete.
+          </p>
+          <button
+            onClick={() => router.push(`/meetings/${meetingId}/join`)}
+            className="mt-6 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            Back to join checklist
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // ===== Loading state =====
