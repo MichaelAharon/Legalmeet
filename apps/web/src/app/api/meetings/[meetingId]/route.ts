@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
 import { mockMeetings, mockParticipants } from '../../lib/mock-store';
+import { buildMeetingPatch } from '@/lib/meeting-update-policy';
 
 export async function GET(_req: NextRequest, { params }: { params: { meetingId: string } }) {
   if (useMock()) {
@@ -21,31 +22,22 @@ export async function GET(_req: NextRequest, { params }: { params: { meetingId: 
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { meetingId: string } }) {
+  const body = await request.json();
+  const patch = buildMeetingPatch(body);
+  if (!patch.ok) {
+    return NextResponse.json({ error: patch.error }, { status: patch.status });
+  }
+
   if (useMock()) {
     const meeting = mockMeetings.find(m => m.id === params.meetingId);
     if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
-    const body = await request.json();
-    Object.assign(meeting, body, { updatedAt: new Date().toISOString() });
+    Object.assign(meeting, patch.mockUpdates, { updatedAt: new Date().toISOString() });
     const participants = mockParticipants.filter(p => p.meetingId === params.meetingId);
     return NextResponse.json({ ...meeting, participants });
   }
 
   const db = getDb();
-  const body = await request.json();
-  // Map camelCase body to snake_case columns
-  const updates: Record<string, unknown> = {};
-  const fieldMap: Record<string, string> = {
-    title: 'title', description: 'description', status: 'status',
-    scheduledAt: 'scheduled_at', ndaTemplateId: 'nda_template_id',
-    ndaRequired: 'nda_required', ndaCustomizedContent: 'nda_customized_content',
-    hostSignedAt: 'host_signed_at', invitesSentAt: 'invites_sent_at',
-    recordingEnabled: 'recording_enabled', transcriptionEnabled: 'transcription_enabled',
-    roomName: 'room_name', roomUrl: 'room_url',
-  };
-  for (const [camel, snake] of Object.entries(fieldMap)) {
-    if (body[camel] !== undefined) updates[snake] = body[camel];
-  }
-  const { data, error } = await db.from('meetings').update(updates)
+  const { data, error } = await db.from('meetings').update(patch.dbUpdates)
     .eq('id', params.meetingId).select('*, meeting_participants(*)').single();
   if (error || !data) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
   const { meeting_participants, ...meeting } = data;

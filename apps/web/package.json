@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --test --experimental-transform-types 'src/lib/meeting-update-policy.test.mjs' 'src/lib/meeting-readiness.test.mjs'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
