@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
 import { mockMeetings, mockParticipants } from '../../lib/mock-store';
+import { getNdaRequirementDisableRejection } from '@/lib/nda-requirement-gate';
 
 export async function GET(_req: NextRequest, { params }: { params: { meetingId: string } }) {
   if (useMock()) {
@@ -25,6 +26,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { meetin
     const meeting = mockMeetings.find(m => m.id === params.meetingId);
     if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     const body = await request.json();
+    const ndaRejection = getNdaRequirementDisableRejection(meeting.ndaRequired, body.ndaRequired);
+    if (ndaRejection) {
+      return NextResponse.json({ error: ndaRejection.error }, { status: ndaRejection.status });
+    }
     Object.assign(meeting, body, { updatedAt: new Date().toISOString() });
     const participants = mockParticipants.filter(p => p.meetingId === params.meetingId);
     return NextResponse.json({ ...meeting, participants });
@@ -32,6 +37,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { meetin
 
   const db = getDb();
   const body = await request.json();
+
+  const { data: existing, error: existingError } = await db
+    .from('meetings')
+    .select('nda_required')
+    .eq('id', params.meetingId)
+    .single();
+  if (existingError || !existing) {
+    return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+  }
+
+  const ndaRejection = getNdaRequirementDisableRejection(existing.nda_required, body.ndaRequired);
+  if (ndaRejection) {
+    return NextResponse.json({ error: ndaRejection.error }, { status: ndaRejection.status });
+  }
+
   // Map camelCase body to snake_case columns
   const updates: Record<string, unknown> = {};
   const fieldMap: Record<string, string> = {
