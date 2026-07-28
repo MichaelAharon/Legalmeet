@@ -42,15 +42,25 @@ export default function PrepareMeetingPage() {
     setNdaContent(content);
   }, []);
 
-  const handleSigningComplete = async () => {
-    setHostSigned(true);
-    setShowSigning(false);
-    // Update meeting with customized NDA content and host signature
+  const handleProceedToSign = async () => {
+    if (!selectedTemplateId || !ndaContent.trim()) return;
+
+    // Persist NDA text before the host signs so the signature snapshot matches
+    // what later participants will see, and so post-signature content stays frozen.
     await updateMeeting.mutateAsync({
       id: meetingId,
       ndaCustomizedContent: ndaContent,
-      hostSignedAt: new Date().toISOString(),
       ndaTemplateId: selectedTemplateId === 'custom' ? null : selectedTemplateId,
+    });
+    setShowSigning(true);
+  };
+
+  const handleSigningComplete = async () => {
+    setHostSigned(true);
+    setShowSigning(false);
+    await updateMeeting.mutateAsync({
+      id: meetingId,
+      hostSignedAt: new Date().toISOString(),
     });
   };
 
@@ -167,8 +177,8 @@ export default function PrepareMeetingPage() {
 
               {selectedTemplateId && ndaContent && (
                 <div className="flex justify-end">
-                  <Button onClick={() => setShowSigning(true)}>
-                    Proceed to Sign
+                  <Button onClick={handleProceedToSign} disabled={updateMeeting.isPending}>
+                    {updateMeeting.isPending ? 'Saving...' : 'Proceed to Sign'}
                   </Button>
                 </div>
               )}
