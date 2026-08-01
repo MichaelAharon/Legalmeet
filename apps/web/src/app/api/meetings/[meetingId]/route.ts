@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
 import { mockMeetings, mockParticipants } from '../../lib/mock-store';
+import { resolveStatusForInviteActivation } from '@/lib/meeting-status';
 
 export async function GET(_req: NextRequest, { params }: { params: { meetingId: string } }) {
   if (useMock()) {
@@ -25,8 +26,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { meetin
     const meeting = mockMeetings.find(m => m.id === params.meetingId);
     if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     const body = await request.json();
-    Object.assign(meeting, body, { updatedAt: new Date().toISOString() });
     const participants = mockParticipants.filter(p => p.meetingId === params.meetingId);
+    if (body.status !== undefined) {
+      body.status = resolveStatusForInviteActivation(body.status, participants);
+    }
+    Object.assign(meeting, body, { updatedAt: new Date().toISOString() });
     return NextResponse.json({ ...meeting, participants });
   }
 
@@ -44,6 +48,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { meetin
   };
   for (const [camel, snake] of Object.entries(fieldMap)) {
     if (body[camel] !== undefined) updates[snake] = body[camel];
+  }
+  if (updates.status !== undefined) {
+    const { data: existingParticipants } = await db
+      .from('meeting_participants')
+      .select('nda_signed_at')
+      .eq('meeting_id', params.meetingId);
+    updates.status = resolveStatusForInviteActivation(
+      updates.status as string,
+      existingParticipants || [],
+    );
   }
   const { data, error } = await db.from('meetings').update(updates)
     .eq('id', params.meetingId).select('*, meeting_participants(*)').single();
