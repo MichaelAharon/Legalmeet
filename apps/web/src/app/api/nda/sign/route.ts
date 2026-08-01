@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../../lib/db';
 import { mockSignatures, mockMeetings, mockTemplates, mockParticipants } from '../../lib/mock-store';
+import { resolveStatusAfterSignatures } from '@/lib/meeting-status';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,9 +42,9 @@ export async function POST(request: NextRequest) {
       };
       mockSignatures.push(signature);
       const meetingParticipants = mockParticipants.filter(p => p.meetingId === meetingId);
-      const allSigned = meetingParticipants.every(p => p.ndaSignedAt != null);
-      if (allSigned && meeting.status === 'awaiting_signatures') {
-        meeting.status = 'ready';
+      const nextStatus = resolveStatusAfterSignatures(meeting.status, meetingParticipants);
+      if (nextStatus) {
+        meeting.status = nextStatus;
         meeting.updatedAt = new Date().toISOString();
       }
       return NextResponse.json(signature, { status: 201 });
@@ -97,9 +98,9 @@ export async function POST(request: NextRequest) {
 
     // Check if all participants have signed
     const { data: allParts } = await db.from('meeting_participants').select('nda_signed_at').eq('meeting_id', meetingId);
-    const allSigned = allParts?.every((p: any) => p.nda_signed_at != null);
-    if (allSigned && meeting.status === 'awaiting_signatures') {
-      await db.from('meetings').update({ status: 'ready' }).eq('id', meetingId);
+    const nextStatus = resolveStatusAfterSignatures(meeting.status, allParts || []);
+    if (nextStatus) {
+      await db.from('meetings').update({ status: nextStatus }).eq('id', meetingId);
     }
 
     return NextResponse.json(toCamel(signature), { status: 201 });
