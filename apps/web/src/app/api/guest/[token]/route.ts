@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { mockGuestTokens, mockMeetings, mockParticipants, mockTemplates } from '../../lib/mock-store';
+import { resolveMeetingNdaContent } from '@/lib/resolve-meeting-nda-content';
 
 // GET — validate guest token and return meeting context
 export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
@@ -19,6 +20,8 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
   // Mark token as used
   if (!guestToken.usedAt) guestToken.usedAt = new Date().toISOString();
 
+  const ndaContent = resolveMeetingNdaContent(meeting.ndaCustomizedContent, template?.content);
+
   return NextResponse.json({
     guest: {
       email: guestToken.email,
@@ -32,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
       scheduledAt: meeting.scheduledAt,
       status: meeting.status,
       ndaRequired: meeting.ndaRequired,
-      ndaContent: meeting.ndaCustomizedContent || template?.content || null,
+      ndaContent: ndaContent || null,
       hasSignedNDA: !!participant?.ndaSignedAt,
     },
   });

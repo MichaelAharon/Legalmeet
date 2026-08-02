@@ -6,22 +6,25 @@ import Link from 'next/link';
 import { Calendar, Users, FileText, Video } from 'lucide-react';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@legalmeet/ui';
 import { useMeeting } from '@/hooks/useMeeting';
-import { useNDASignatureStatus } from '@/hooks/useNDA';
+import { useNDASignatureStatus, useNDATemplate } from '@/hooks/useNDA';
 import { NDASigningFlow } from '@/components/nda/NDASigningFlow';
 import { SignatureStatusTracker } from '@/components/nda/SignatureStatusTracker';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { resolveMeetingNdaContent } from '@/lib/resolve-meeting-nda-content';
 
 export default function MeetingLinkPage() {
   const params = useParams();
   const meetingId = params.meetingId as string;
   const { data: meeting, isLoading: meetingLoading } = useMeeting(meetingId);
   const { data: sigStatus, isLoading: sigLoading } = useNDASignatureStatus(meetingId);
+  const needsTemplate = !!meeting && !meeting.ndaCustomizedContent && !!meeting.ndaTemplateId;
+  const { data: template, isLoading: templateLoading } = useNDATemplate(meeting?.ndaTemplateId || '');
 
   const [selectedParticipantId, setSelectedParticipantId] = useState('');
   const [showSigning, setShowSigning] = useState(false);
   const [signed, setSigned] = useState(false);
 
-  if (meetingLoading || sigLoading) {
+  if (meetingLoading || sigLoading || (needsTemplate && templateLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
         <LoadingSpinner size="lg" />
@@ -41,7 +44,8 @@ export default function MeetingLinkPage() {
   const unsignedParticipants = participants.filter((p: any) => !p.ndaSignedAt && p.role !== 'host');
   const selectedParticipant = participants.find((p: any) => p.id === selectedParticipantId);
   const allSigned = sigStatus?.allSigned || false;
-  const ndaContent = meeting.ndaCustomizedContent || '';
+  // Match /api/nda/sign and /api/guest: customized content, else live template body.
+  const ndaContent = resolveMeetingNdaContent(meeting.ndaCustomizedContent, template?.content);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-950 dark:to-slate-900 py-8 px-4">
@@ -77,7 +81,7 @@ export default function MeetingLinkPage() {
         </Card>
 
         {/* NDA Document */}
-        {ndaContent && (
+        {ndaContent ? (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -90,7 +94,15 @@ export default function MeetingLinkPage() {
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : meeting.ndaRequired ? (
+          <Card>
+            <CardContent className="py-6 text-center">
+              <p className="text-sm text-slate-500">
+                NDA content is not available for this meeting yet. Ask the host to prepare the agreement before signing.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Signature Status */}
         <Card>
@@ -102,8 +114,8 @@ export default function MeetingLinkPage() {
           </CardContent>
         </Card>
 
-        {/* Sign NDA */}
-        {!allSigned && !signed && unsignedParticipants.length > 0 && (
+        {/* Sign NDA — only when the same text the API will snapshot is available */}
+        {!allSigned && !signed && unsignedParticipants.length > 0 && !!ndaContent && (
           <Card>
             <CardHeader>
               <CardTitle>Sign the NDA</CardTitle>
