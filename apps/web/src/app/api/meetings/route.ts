@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../lib/db';
+import { getInitialMeetingStatus } from '@/lib/meeting-readiness';
 import { mockMeetings, mockParticipants, mockProjects } from '../lib/mock-store';
 
 export async function GET(request: NextRequest) {
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
         mockProjects.push(newProject);
         projectId = newProject.id;
       }
+      const ndaRequired = body.ndaRequired ?? true;
       const meeting = {
         id: crypto.randomUUID(),
         projectId,
@@ -65,10 +67,10 @@ export async function POST(request: NextRequest) {
         description: body.description || null,
         scheduledAt: body.scheduledAt || new Date().toISOString(),
         startedAt: null, endedAt: null, durationSeconds: null,
-        status: 'scheduled',
+        status: getInitialMeetingStatus(ndaRequired),
         roomName: null, roomUrl: null,
         ndaTemplateId: body.ndaTemplateId || null,
-        ndaRequired: body.ndaRequired ?? true,
+        ndaRequired,
         ndaCustomizedContent: null,
         hostSignedAt: null,
         invitesSentAt: null,
@@ -95,7 +97,8 @@ export async function POST(request: NextRequest) {
           });
         }
       }
-      return NextResponse.json(meeting, { status: 201 });
+      const participants = mockParticipants.filter(p => p.meetingId === meeting.id);
+      return NextResponse.json({ ...meeting, participants }, { status: 201 });
     }
 
     const db = getDb();
@@ -110,6 +113,7 @@ export async function POST(request: NextRequest) {
       projectId = proj?.id || null;
     }
 
+    const ndaRequired = body.ndaRequired ?? true;
     const { data: meeting, error } = await db.from('meetings').insert({
       project_id: projectId,
       sub_project_id: body.subProjectId || null,
@@ -117,8 +121,10 @@ export async function POST(request: NextRequest) {
       title: body.title,
       description: body.description || null,
       scheduled_at: body.scheduledAt || new Date().toISOString(),
+      // Status stays DB default ('scheduled'): initial schema CHECK lacks ready/awaiting_signatures.
+      // Join CTA for non-NDA meetings is handled in the meeting detail UI via canShowMeetingJoinCta.
       nda_template_id: body.ndaTemplateId || null,
-      nda_required: body.ndaRequired ?? true,
+      nda_required: ndaRequired,
       recording_enabled: body.recordingEnabled ?? true,
       transcription_enabled: body.transcriptionEnabled ?? true,
     }).select().single();

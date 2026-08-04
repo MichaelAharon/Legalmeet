@@ -28,7 +28,14 @@ export async function POST(request: NextRequest) {
         resolvedParticipantId = participant?.id || crypto.randomUUID();
       }
       const participant = mockParticipants.find(p => p.id === resolvedParticipantId);
-      if (participant) participant.ndaSignedAt = signedAt;
+      if (participant) {
+        participant.ndaSignedAt = signedAt;
+        // Keep meeting.hostSignedAt in sync with an actual host signature — never trust client PATCH alone.
+        if (participant.meetingId === meetingId && participant.role === 'host') {
+          meeting.hostSignedAt = signedAt;
+          meeting.updatedAt = new Date().toISOString();
+        }
+      }
       const ndaContent = meeting.ndaCustomizedContent || template.content;
       const signature = {
         id: crypto.randomUUID(),
@@ -61,10 +68,16 @@ export async function POST(request: NextRequest) {
 
     // Resolve participant
     let resolvedPid = participantId;
+    let resolvedRole: string | null = null;
     if (!resolvedPid) {
-      const { data: p } = await db.from('meeting_participants').select('id')
+      const { data: p } = await db.from('meeting_participants').select('id, role')
         .eq('meeting_id', meetingId).eq('email', signerEmail).single();
       resolvedPid = p?.id || crypto.randomUUID();
+      resolvedRole = p?.role ?? null;
+    } else {
+      const { data: p } = await db.from('meeting_participants').select('role')
+        .eq('id', resolvedPid).eq('meeting_id', meetingId).single();
+      resolvedRole = p?.role ?? null;
     }
 
     // Create hash
@@ -94,6 +107,11 @@ export async function POST(request: NextRequest) {
 
     // Update participant nda_signed_at
     await db.from('meeting_participants').update({ nda_signed_at: signedAt }).eq('id', resolvedPid);
+
+    // Sync hostSignedAt only when the host participant actually signed
+    if (resolvedRole === 'host') {
+      await db.from('meetings').update({ host_signed_at: signedAt }).eq('id', meetingId);
+    }
 
     // Check if all participants have signed
     const { data: allParts } = await db.from('meeting_participants').select('nda_signed_at').eq('meeting_id', meetingId);
