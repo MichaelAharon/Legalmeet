@@ -8,6 +8,8 @@ import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Skeleton, Sepa
 import { useMeeting } from '@/hooks/useMeeting';
 import { SignatureStatusTracker } from '@/components/nda/SignatureStatusTracker';
 import { formatDisplay } from '@/lib/utils/dates';
+import { hostParticipantHasSigned } from '@/lib/host-signature-gate';
+import { canShowMeetingJoinCta } from '@/lib/meeting-readiness';
 
 export default function MeetingDetailPage() {
   const params = useParams();
@@ -24,6 +26,8 @@ export default function MeetingDetailPage() {
   };
   const statusColor = statusMap[meeting.status as string] ?? 'default';
   const meetingLink = typeof window !== 'undefined' ? `${window.location.origin}/meeting-link/${meetingId}` : '';
+  const hostHasSigned = hostParticipantHasSigned(meeting.participants);
+  const showJoin = canShowMeetingJoinCta(meeting);
 
   const copyLink = () => {
     navigator.clipboard.writeText(meetingLink);
@@ -44,8 +48,8 @@ export default function MeetingDetailPage() {
         </div>
       </div>
 
-      {/* Status-specific actions */}
-      {meeting.status === 'scheduled' && !meeting.hostSignedAt && (
+      {/* Status-specific actions — gate on host participant signature, not hostSignedAt */}
+      {meeting.ndaRequired && meeting.status !== 'ready' && meeting.status !== 'completed' && meeting.status !== 'in_progress' && meeting.status !== 'cancelled' && !hostHasSigned && !showJoin && (
         <Card>
           <CardContent className="py-6 text-center">
             <Edit className="h-12 w-12 text-indigo-500 mx-auto mb-4" />
@@ -62,7 +66,7 @@ export default function MeetingDetailPage() {
         </Card>
       )}
 
-      {(meeting.status === 'awaiting_signatures' || (meeting.status === 'scheduled' && meeting.hostSignedAt)) && (
+      {meeting.ndaRequired && hostHasSigned && meeting.status !== 'ready' && meeting.status !== 'completed' && meeting.status !== 'in_progress' && meeting.status !== 'cancelled' && !showJoin && (
         <Card>
           <CardContent className="py-6 space-y-4">
             <div className="text-center">
@@ -83,11 +87,13 @@ export default function MeetingDetailPage() {
         </Card>
       )}
 
-      {meeting.status === 'ready' && (
+      {showJoin && (
         <Card>
           <CardContent className="py-6 text-center">
             <Video className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold mb-2">All Parties Signed — Ready to Join!</h2>
+            <h2 className="text-lg font-semibold mb-2">
+              {meeting.ndaRequired ? 'All Parties Signed — Ready to Join!' : 'Ready to Join!'}
+            </h2>
             <Button asChild size="lg">
               <Link href={`/meetings/${meetingId}/join`}>
                 <Video className="h-4 w-4 mr-2" />Join Meeting

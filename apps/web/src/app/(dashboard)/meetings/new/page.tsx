@@ -157,18 +157,22 @@ function NewMeetingForm() {
       participants: participants.map(p => ({ email: p.email, displayName: p.displayName })),
     });
 
-    setCreatedMeetingId(result.id);
-
-    // 2. Update with NDA content + host signature
+    // 2. Persist NDA content before signing — do NOT set hostSignedAt yet.
+    //    hostSignedAt without nda_signatures / participant.ndaSignedAt permanently
+    //    locks prepare UI while readiness stays false.
     await updateMeeting.mutateAsync({
       id: result.id,
       ndaCustomizedContent: ndaContent,
-      hostSignedAt: new Date().toISOString(),
       ndaTemplateId: ndaTemplateId === 'custom' ? null : ndaTemplateId,
     });
 
-    // 3. Sign the NDA
-    const hostParticipant = result.participants?.find((p: any) => p.role === 'host');
+    // 3. Sign the NDA (server sets host participant ndaSignedAt + meeting.hostSignedAt).
+    let hostParticipant = result.participants?.find((p: any) => p.role === 'host');
+    if (!hostParticipant?.id) {
+      const meetingRes = await fetch(`/api/meetings/${result.id}`);
+      const created = meetingRes.ok ? await meetingRes.json() : null;
+      hostParticipant = created?.participants?.find((p: any) => p.role === 'host');
+    }
     await signNDA.mutateAsync({
       meetingId: result.id,
       participantId: hostParticipant?.id,
@@ -177,6 +181,8 @@ function NewMeetingForm() {
       signerEmail: 'demo@legalmeet.com',
     });
 
+    // 4. Only mark the wizard complete after the signature succeeds.
+    setCreatedMeetingId(result.id);
     setSigningStep('confirm');
   };
 
@@ -521,18 +527,20 @@ function NewMeetingForm() {
             </Card>
           )}
 
-          {/* After creation — send invites */}
+          {/* After creation — send invites (NDA) or join (non-NDA) */}
           {createdMeetingId && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-emerald-600 text-base">
                   <Check className="h-5 w-5" />
-                  Meeting Created & NDA Signed
+                  {ndaRequired ? 'Meeting Created & NDA Signed' : 'Meeting Created'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-slate-500">
-                  Share the meeting link with participants. They will need to sign the NDA before the meeting can begin.
+                  {ndaRequired
+                    ? 'Share the meeting link with participants. They will need to sign the NDA before the meeting can begin.'
+                    : 'No NDA is required. You can join the meeting now or share the link with participants.'}
                 </p>
 
                 {/* Copyable link */}
@@ -550,7 +558,9 @@ function NewMeetingForm() {
                 {/* Participant list */}
                 {participants.length > 0 && (
                   <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Invite will be sent to:</p>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {ndaRequired ? 'Invite will be sent to:' : 'Participants:'}
+                    </p>
                     {participants.map(p => (
                       <div key={p.email} className="flex items-center gap-2 text-sm p-2 rounded bg-slate-50 dark:bg-slate-800/50">
                         <div className="h-6 w-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-indigo-600 dark:text-indigo-300">
@@ -564,15 +574,21 @@ function NewMeetingForm() {
                 )}
 
                 <div className="flex gap-2">
-                  {!inviteSent ? (
-                    <Button onClick={handleSendInvites} disabled={updateMeeting.isPending}>
-                      <Send className="h-4 w-4 mr-2" />
-                      {updateMeeting.isPending ? 'Sending...' : 'Send Invites & Activate'}
-                    </Button>
+                  {ndaRequired ? (
+                    !inviteSent ? (
+                      <Button onClick={handleSendInvites} disabled={updateMeeting.isPending}>
+                        <Send className="h-4 w-4 mr-2" />
+                        {updateMeeting.isPending ? 'Sending...' : 'Send Invites & Activate'}
+                      </Button>
+                    ) : (
+                      <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 px-3 py-1.5">
+                        <Check className="h-3.5 w-3.5 mr-1.5" /> Invites Sent
+                      </Badge>
+                    )
                   ) : (
-                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 px-3 py-1.5">
-                      <Check className="h-3.5 w-3.5 mr-1.5" /> Invites Sent
-                    </Badge>
+                    <Button asChild>
+                      <Link href={`/meetings/${createdMeetingId}/join`}>Join Meeting</Link>
+                    </Button>
                   )}
                   <Button variant="outline" asChild>
                     <Link href={`/meetings/${createdMeetingId}`}>View Meeting</Link>

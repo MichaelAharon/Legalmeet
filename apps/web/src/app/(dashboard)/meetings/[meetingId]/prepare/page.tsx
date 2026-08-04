@@ -10,6 +10,7 @@ import { useNDATemplates } from '@/hooks/useNDA';
 import { NDAEditor } from '@/components/nda/NDAEditor';
 import { NDASigningFlow } from '@/components/nda/NDASigningFlow';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { isHostNdaPrepareComplete } from '@/lib/host-signature-gate';
 
 export default function PrepareMeetingPage() {
   const params = useParams();
@@ -45,11 +46,11 @@ export default function PrepareMeetingPage() {
   const handleSigningComplete = async () => {
     setHostSigned(true);
     setShowSigning(false);
-    // Update meeting with customized NDA content and host signature
+    // hostSignedAt is set by /api/nda/sign when the host participant signs.
+    // Persist customized content/template id for invitees (sign already completed).
     await updateMeeting.mutateAsync({
       id: meetingId,
       ndaCustomizedContent: ndaContent,
-      hostSignedAt: new Date().toISOString(),
       ndaTemplateId: selectedTemplateId === 'custom' ? null : selectedTemplateId,
     });
   };
@@ -71,7 +72,9 @@ export default function PrepareMeetingPage() {
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (!meeting) return <p>Meeting not found.</p>;
 
-  const isAlreadyPrepared = meeting.hostSignedAt || meeting.status === 'awaiting_signatures';
+  // Must use host participant ndaSignedAt — hostSignedAt / awaiting_signatures can be
+  // set via PATCH without an actual signature, which would permanently block re-signing.
+  const isAlreadyPrepared = isHostNdaPrepareComplete(meeting.participants);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
