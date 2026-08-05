@@ -10,6 +10,7 @@ import { useNDASignatureStatus } from '@/hooks/useNDA';
 import { NDASigningFlow } from '@/components/nda/NDASigningFlow';
 import { SignatureStatusTracker } from '@/components/nda/SignatureStatusTracker';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { canJoinMeeting, shouldShowMeetingLinkNdaFlow } from '@/lib/meeting-link-access';
 
 export default function MeetingLinkPage() {
   const params = useParams();
@@ -42,6 +43,8 @@ export default function MeetingLinkPage() {
   const selectedParticipant = participants.find((p: any) => p.id === selectedParticipantId);
   const allSigned = sigStatus?.allSigned || false;
   const ndaContent = meeting.ndaCustomizedContent || '';
+  const showNdaFlow = shouldShowMeetingLinkNdaFlow(meeting);
+  const canJoin = canJoinMeeting(meeting, allSigned);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-950 dark:to-slate-900 py-8 px-4">
@@ -92,18 +95,20 @@ export default function MeetingLinkPage() {
           </Card>
         )}
 
-        {/* Signature Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Signature Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SignatureStatusTracker meetingId={meetingId} />
-          </CardContent>
-        </Card>
+        {/* Signature Status — NDA meetings only */}
+        {showNdaFlow && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Signature Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SignatureStatusTracker meetingId={meetingId} />
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Sign NDA */}
-        {!allSigned && !signed && unsignedParticipants.length > 0 && (
+        {/* Sign NDA — NDA meetings only (non-NDA invitees must still reach Join) */}
+        {showNdaFlow && !allSigned && !signed && unsignedParticipants.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Sign the NDA</CardTitle>
@@ -145,7 +150,7 @@ export default function MeetingLinkPage() {
         )}
 
         {/* Signed confirmation */}
-        {signed && !allSigned && (
+        {showNdaFlow && signed && !allSigned && (
           <Card>
             <CardContent className="py-6 text-center">
               <p className="text-emerald-600 font-medium">You have signed the NDA.</p>
@@ -154,13 +159,17 @@ export default function MeetingLinkPage() {
           </Card>
         )}
 
-        {/* All signed - Join meeting */}
-        {allSigned && (
+        {/* Join — non-NDA meetings must not wait on allSigned */}
+        {canJoin && (
           <Card>
             <CardContent className="py-6 text-center space-y-4">
               <div className="flex items-center justify-center gap-2 text-emerald-600">
                 <Video className="h-6 w-6" />
-                <span className="text-lg font-semibold">All parties have signed — Meeting is ready!</span>
+                <span className="text-lg font-semibold">
+                  {showNdaFlow
+                    ? 'All parties have signed — Meeting is ready!'
+                    : 'Meeting is ready!'}
+                </span>
               </div>
               <Button size="lg" asChild>
                 <Link href={`/meetings/${meetingId}/join`}>Join Meeting</Link>
