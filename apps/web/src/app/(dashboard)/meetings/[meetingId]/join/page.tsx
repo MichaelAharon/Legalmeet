@@ -7,6 +7,7 @@ import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@legalm
 import { useMeeting, useCreateRoom } from '@/hooks/useMeeting';
 import { useNDASignatureStatus } from '@/hooks/useNDA';
 import { SignatureStatusTracker } from '@/components/nda/SignatureStatusTracker';
+import { canJoinMeeting } from '@/lib/meeting-link-access';
 
 export default function JoinMeetingPage() {
   const params = useParams();
@@ -17,7 +18,7 @@ export default function JoinMeetingPage() {
   const createRoom = useCreateRoom(meetingId);
 
   const allSigned = sigStatus?.allSigned || false;
-  const canJoin = !meeting?.ndaRequired || allSigned;
+  const canJoin = canJoinMeeting({ ndaRequired: meeting?.ndaRequired }, allSigned);
 
   const handleJoinCall = async () => {
     await createRoom.mutateAsync();
