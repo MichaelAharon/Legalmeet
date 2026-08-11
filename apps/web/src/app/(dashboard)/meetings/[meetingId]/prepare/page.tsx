@@ -134,9 +134,9 @@ export default function PrepareMeetingPage() {
         </Card>
       ) : (
         <>
-          {/* Step 1: NDA Setup */}
-          {!showSigning && !hostSigned && (
-            <>
+          {/* Step 1: NDA Setup — keep mounted (hidden) while signing so Back does not remount/wipe edits */}
+          {!hostSigned && (
+            <div className={showSigning ? 'hidden' : undefined}>
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -155,9 +155,10 @@ export default function PrepareMeetingPage() {
                     </Select>
                   </div>
 
-                  {(selectedTemplateId) && (
+                  {selectedTemplateId && (
                     <NDAEditor
-                      initialContent={selectedTemplateId === 'custom' ? '' : (selectedTemplate?.content || '')}
+                      key={selectedTemplateId}
+                      initialContent={ndaContent}
                       templateVars={selectedTemplateId === 'custom' ? [] : (selectedTemplate?.templateVars || [])}
                       onChange={handleNdaContentChange}
                     />
@@ -172,7 +173,7 @@ export default function PrepareMeetingPage() {
                   </Button>
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {/* Step 2: Host signing */}

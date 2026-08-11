@@ -13,6 +13,7 @@ import { useNDATemplates, useSignNDA } from '@/hooks/useNDA';
 import { useSubProjects } from '@/hooks/useSubProject';
 import { NDAEditor } from '@/components/nda/NDAEditor';
 import { SignatureCanvas } from '@/components/nda/SignatureCanvas';
+import { shouldMarkNdaMeetingCreated } from '@/lib/meeting-create-success';
 import { useState, useCallback, Suspense } from 'react';
 import { cn } from '@/lib/utils/cn';
 
@@ -157,8 +158,6 @@ function NewMeetingForm() {
       participants: participants.map(p => ({ email: p.email, displayName: p.displayName })),
     });
 
-    setCreatedMeetingId(result.id);
-
     // 2. Update with NDA content + host signature
     await updateMeeting.mutateAsync({
       id: result.id,
@@ -167,7 +166,7 @@ function NewMeetingForm() {
       ndaTemplateId: ndaTemplateId === 'custom' ? null : ndaTemplateId,
     });
 
-    // 3. Sign the NDA
+    // 3. Sign the NDA — only mark created after sign succeeds so UI cannot claim success on partial failure
     const hostParticipant = result.participants?.find((p: any) => p.role === 'host');
     await signNDA.mutateAsync({
       meetingId: result.id,
@@ -177,6 +176,15 @@ function NewMeetingForm() {
       signerEmail: 'demo@legalmeet.com',
     });
 
+    if (
+      shouldMarkNdaMeetingCreated({
+        meetingCreated: true,
+        contentSaved: true,
+        hostSigned: true,
+      })
+    ) {
+      setCreatedMeetingId(result.id);
+    }
     setSigningStep('confirm');
   };
 
@@ -341,97 +349,96 @@ function NewMeetingForm() {
       )}
 
       {/* ====== Step 4: NDA Setup ====== */}
-      {step === 3 && (
-        <>
-          {!ndaRequired ? (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <FileText className="h-10 w-10 mx-auto text-slate-300 mb-3" />
-                <p className="text-sm text-slate-500">NDA is not required for this meeting.</p>
-                <p className="text-xs text-slate-400 mt-1">You can enable it in Step 1 if needed.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              {/* Party Names - auto-filled from participants */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Users className="h-4 w-4" />
-                    NDA Parties
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-xs text-slate-500">These names will be used to fill the NDA template. Adjust if needed.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Input
-                      label="Your Name / Company (Party A)"
-                      value={ndaPartyA}
-                      onChange={e => setNdaPartyA(e.target.value)}
-                      placeholder="e.g., LegalMeet Inc."
-                    />
-                    <Input
-                      label="Other Side (Party B)"
-                      value={ndaPartyB}
-                      onChange={e => setNdaPartyB(e.target.value)}
-                      placeholder="e.g., Acme Corporation"
-                    />
-                  </div>
-                  {participants.length > 0 && (
-                    <div className="text-xs text-slate-400">
-                      Participants: {participants.map(p => `${p.displayName}${p.company ? ` (${p.company})` : ''}`).join(', ')}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+      {step === 3 && !ndaRequired && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <FileText className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+            <p className="text-sm text-slate-500">NDA is not required for this meeting.</p>
+            <p className="text-xs text-slate-400 mt-1">You can enable it in Step 1 if needed.</p>
+          </CardContent>
+        </Card>
+      )}
 
-              {/* Template Selection + Editor */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <PenLine className="h-4 w-4" />
-                    NDA Template
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Select Template</label>
-                    <Select value={ndaTemplateId} onValueChange={handleTemplateChange}>
-                      <SelectTrigger><SelectValue placeholder="Choose a template or start custom" /></SelectTrigger>
-                      <SelectContent>
-                        {templates?.map((t: any) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            <div className="flex items-center gap-2">
-                              <span>{t.name}</span>
-                              {t.isDefault && <Badge variant="outline" className="text-[9px] ml-1">Default</Badge>}
-                            </div>
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="custom">Write Custom NDA</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+      {/* Keep NDA editor mounted on review/sign steps so Back does not remount/wipe edits */}
+      {ndaRequired && step >= 3 && !createdMeetingId && (
+        <div className={`space-y-6 ${step !== 3 ? 'hidden' : ''}`}>
+          {/* Party Names - auto-filled from participants */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-4 w-4" />
+                NDA Parties
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-slate-500">These names will be used to fill the NDA template. Adjust if needed.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Your Name / Company (Party A)"
+                  value={ndaPartyA}
+                  onChange={e => setNdaPartyA(e.target.value)}
+                  placeholder="e.g., LegalMeet Inc."
+                />
+                <Input
+                  label="Other Side (Party B)"
+                  value={ndaPartyB}
+                  onChange={e => setNdaPartyB(e.target.value)}
+                  placeholder="e.g., Acme Corporation"
+                />
+              </div>
+              {participants.length > 0 && (
+                <div className="text-xs text-slate-400">
+                  Participants: {participants.map(p => `${p.displayName}${p.company ? ` (${p.company})` : ''}`).join(', ')}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-                  {selectedTemplate && (
-                    <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-md p-2">
-                      {selectedTemplate.description || `${selectedTemplate.templateVars?.length || 0} template variables`}
-                    </div>
-                  )}
+          {/* Template Selection + Editor */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <PenLine className="h-4 w-4" />
+                NDA Template
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Select Template</label>
+                <Select value={ndaTemplateId} onValueChange={handleTemplateChange}>
+                  <SelectTrigger><SelectValue placeholder="Choose a template or start custom" /></SelectTrigger>
+                  <SelectContent>
+                    {templates?.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{t.name}</span>
+                          {t.isDefault && <Badge variant="outline" className="text-[9px] ml-1">Default</Badge>}
+                        </div>
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">Write Custom NDA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                  {ndaTemplateId && (
-                    <NDAEditor
-                      key={ndaTemplateId}
-                      initialContent={ndaTemplateId === 'custom' ? '' : (selectedTemplate?.content || '')}
-                      templateVars={ndaTemplateId === 'custom' ? [] : (selectedTemplate?.templateVars || [])}
-                      onChange={handleNdaContentChange}
-                      autoFillValues={getAutoFilledVars()}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </>
+              {selectedTemplate && (
+                <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-md p-2">
+                  {selectedTemplate.description || `${selectedTemplate.templateVars?.length || 0} template variables`}
+                </div>
+              )}
+
+              {ndaTemplateId && (
+                <NDAEditor
+                  key={ndaTemplateId}
+                  initialContent={ndaContent}
+                  templateVars={ndaTemplateId === 'custom' ? [] : (selectedTemplate?.templateVars || [])}
+                  onChange={handleNdaContentChange}
+                  autoFillValues={getAutoFilledVars()}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* ====== Step 5: Review & Sign ====== */}
