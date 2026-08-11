@@ -13,6 +13,7 @@ import { useNDATemplates, useSignNDA } from '@/hooks/useNDA';
 import { useSubProjects } from '@/hooks/useSubProject';
 import { NDAEditor } from '@/components/nda/NDAEditor';
 import { SignatureCanvas } from '@/components/nda/SignatureCanvas';
+import { shouldMarkNdaMeetingCreated } from '@/lib/meeting-create-success';
 import { useState, useCallback, Suspense } from 'react';
 import { cn } from '@/lib/utils/cn';
 
@@ -175,7 +176,15 @@ function NewMeetingForm() {
       signerEmail: 'demo@legalmeet.com',
     });
 
-    setCreatedMeetingId(result.id);
+    if (
+      shouldMarkNdaMeetingCreated({
+        meetingCreated: true,
+        contentSaved: true,
+        hostSigned: true,
+      })
+    ) {
+      setCreatedMeetingId(result.id);
+    }
     setSigningStep('confirm');
   };
 
