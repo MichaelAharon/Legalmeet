@@ -3,6 +3,14 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Input, Textarea } from '@legalmeet/ui';
 
+/**
+ * NDA content editor with optional template-variable substitution.
+ *
+ * Callers that toggle between editor and signing UI must keep this component
+ * mounted (e.g. hide with CSS) or remount with `initialContent` set to the
+ * latest saved draft. Remounting with the original template / empty string
+ * will overwrite parent draft state via onChange and permanently lose edits.
+ */
 interface NDAEditorProps {
   initialContent: string;
   templateVars?: Array<{ name: string; label: string; type: string; required: boolean }>;
