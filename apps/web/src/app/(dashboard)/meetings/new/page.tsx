@@ -13,7 +13,7 @@ import { useNDATemplates, useSignNDA } from '@/hooks/useNDA';
 import { useSubProjects } from '@/hooks/useSubProject';
 import { NDAEditor } from '@/components/nda/NDAEditor';
 import { SignatureCanvas } from '@/components/nda/SignatureCanvas';
-import { useState, useCallback, Suspense } from 'react';
+import { useState, useCallback, useMemo, Suspense } from 'react';
 import { cn } from '@/lib/utils/cn';
 
 const STEPS = ['Meeting Details', 'Participants', 'Project', 'NDA Setup', 'Review & Sign'];
@@ -110,8 +110,9 @@ function NewMeetingForm() {
 
   const selectedTemplate = templates?.find((t: any) => t.id === ndaTemplateId);
 
-  // Auto-fill template vars from meeting info
-  const getAutoFilledVars = () => {
+  // Auto-fill template vars from meeting info. Memoized so NDAEditor can
+  // distinguish a real party-name change from a new object every render.
+  const autoFillValues = useMemo(() => {
     const vars = selectedTemplate?.templateVars || [];
     const auto: Record<string, string> = {};
     for (const v of vars) {
@@ -125,7 +126,7 @@ function NewMeetingForm() {
       }
     }
     return auto;
-  };
+  }, [selectedTemplate, scheduledAt, ndaPartyA, ndaPartyB]);
 
   const canProceed = () => {
     if (step === 0) return title.length >= 2 && scheduledAt;
@@ -424,7 +425,7 @@ function NewMeetingForm() {
                       initialContent={ndaTemplateId === 'custom' ? '' : (selectedTemplate?.content || '')}
                       templateVars={ndaTemplateId === 'custom' ? [] : (selectedTemplate?.templateVars || [])}
                       onChange={handleNdaContentChange}
-                      autoFillValues={getAutoFilledVars()}
+                      autoFillValues={autoFillValues}
                     />
                   )}
                 </CardContent>

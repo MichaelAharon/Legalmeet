@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Input, Textarea } from '@legalmeet/ui';
+import { applyNdaAutoFill, ndaAutoFillKey } from '@/lib/utils/nda-autofill';
 
 interface NDAEditorProps {
   initialContent: string;
@@ -13,23 +14,17 @@ interface NDAEditorProps {
 export function NDAEditor({ initialContent, templateVars = [], onChange, autoFillValues }: NDAEditorProps) {
   const [content, setContent] = useState(initialContent);
   const [varValues, setVarValues] = useState<Record<string, string>>({});
-  const autoFilled = useRef(false);
+  const autoFillKey = ndaAutoFillKey(autoFillValues);
 
-  // Auto-fill values from meeting info on mount
+  // Re-apply when party/date auto-fill values change. A one-shot mount guard
+  // would ignore later edits to the Book a Meeting "NDA Parties" card, so the
+  // signed ndaCustomizedContent would keep the stale names.
   useEffect(() => {
-    if (autoFillValues && !autoFilled.current) {
-      setVarValues(prev => {
-        const merged = { ...prev };
-        for (const [key, value] of Object.entries(autoFillValues)) {
-          if (value && !merged[key]) {
-            merged[key] = value;
-          }
-        }
-        return merged;
-      });
-      autoFilled.current = true;
-    }
-  }, [autoFillValues]);
+    setVarValues(prev => applyNdaAutoFill(prev, autoFillValues));
+    // Keyed on serialized values so a new object identity every parent render
+    // does not clobber template-variable edits the user made in this editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoFillKey is the value identity of autoFillValues
+  }, [autoFillKey]);
 
   // Parse variables from content if none provided
   const vars = useMemo(() => {
