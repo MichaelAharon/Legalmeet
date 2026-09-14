@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useMock, getDb, toCamel } from '../lib/db';
 import { mockMeetings, mockParticipants, mockProjects } from '../lib/mock-store';
+import { resolveCreateDurationSeconds } from '@/lib/utils/meeting-duration';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
         title: body.title,
         description: body.description || null,
         scheduledAt: body.scheduledAt || new Date().toISOString(),
-        startedAt: null, endedAt: null, durationSeconds: null,
+        startedAt: null, endedAt: null, durationSeconds: resolveCreateDurationSeconds(body),
         status: 'scheduled',
         roomName: null, roomUrl: null,
         ndaTemplateId: body.ndaTemplateId || null,
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
       title: body.title,
       description: body.description || null,
       scheduled_at: body.scheduledAt || new Date().toISOString(),
+      duration_seconds: resolveCreateDurationSeconds(body),
       nda_template_id: body.ndaTemplateId || null,
       nda_required: body.ndaRequired ?? true,
       recording_enabled: body.recordingEnabled ?? true,
