@@ -15,6 +15,7 @@ import { NDAEditor } from '@/components/nda/NDAEditor';
 import { SignatureCanvas } from '@/components/nda/SignatureCanvas';
 import { useState, useCallback, Suspense } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { durationMinutesToSeconds, parseMeetingDurationMinutes } from '@/lib/utils/meeting-duration';
 
 const STEPS = ['Meeting Details', 'Participants', 'Project', 'NDA Setup', 'Review & Sign'];
 
@@ -33,6 +34,7 @@ function NewMeetingForm() {
   const [title, setTitle] = useState(searchParams.get('title') || '');
   const [description, setDescription] = useState('');
   const [scheduledAt, setScheduledAt] = useState(searchParams.get('scheduledAt') || '');
+  const [durationMinutes] = useState(() => parseMeetingDurationMinutes(searchParams.get('duration')));
   const [ndaRequired, setNdaRequired] = useState(true);
   const [recordingEnabled, setRecordingEnabled] = useState(true);
   const [transcriptionEnabled, setTranscriptionEnabled] = useState(true);
@@ -146,6 +148,7 @@ function NewMeetingForm() {
       title,
       description,
       scheduledAt: new Date(scheduledAt).toISOString(),
+      durationSeconds: durationMinutesToSeconds(durationMinutes),
       projectId: projectMode === 'new' ? null : (projectId || null),
       subProjectId: subProjectId || null,
       ndaTemplateId: ndaTemplateId === 'custom' ? null : (ndaTemplateId || null),
@@ -614,6 +617,7 @@ function NewMeetingForm() {
                 const result = await createMeeting.mutateAsync({
                   title, description,
                   scheduledAt: new Date(scheduledAt).toISOString(),
+                  durationSeconds: durationMinutesToSeconds(durationMinutes),
                   projectId: projectMode === 'new' ? null : (projectId || null),
                   subProjectId: subProjectId || null,
                   ndaRequired: false, recordingEnabled, transcriptionEnabled,

@@ -36,7 +36,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { meetin
   const updates: Record<string, unknown> = {};
   const fieldMap: Record<string, string> = {
     title: 'title', description: 'description', status: 'status',
-    scheduledAt: 'scheduled_at', ndaTemplateId: 'nda_template_id',
+    scheduledAt: 'scheduled_at', durationSeconds: 'duration_seconds', ndaTemplateId: 'nda_template_id',
     ndaRequired: 'nda_required', ndaCustomizedContent: 'nda_customized_content',
     hostSignedAt: 'host_signed_at', invitesSentAt: 'invites_sent_at',
     recordingEnabled: 'recording_enabled', transcriptionEnabled: 'transcription_enabled',

@@ -6,6 +6,11 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, AlertTriangle, Lock } from 'lucide-react';
 import { Button, Badge, Input, Textarea, Switch } from '@legalmeet/ui';
 import { cn } from '@/lib/utils/cn';
+import {
+  DEFAULT_MEETING_DURATION_MINUTES,
+  buildNewMeetingScheduleHref,
+  meetingDurationMinutesForConflicts,
+} from '@/lib/utils/meeting-duration';
 
 type Meeting = {
   id: string;
@@ -46,9 +51,6 @@ function meetingStartMinutes(scheduledAt: string): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-/** Default meeting duration = 60 minutes */
-const DEFAULT_DURATION = 60;
-
 /** Check if a time slot overlaps with a meeting */
 function slotOverlapsMeeting(
   slotMinutes: number,
@@ -71,7 +73,7 @@ export function MeetingCalendar({ meetings, onDayClick }: { meetings: Meeting[];
   const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<typeof TIME_SLOTS[number] | null>(null);
   const [meetingTitle, setMeetingTitle] = useState('');
-  const [meetingDuration, setMeetingDuration] = useState(60); // minutes
+  const [meetingDuration, setMeetingDuration] = useState(DEFAULT_MEETING_DURATION_MINUTES);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
@@ -122,7 +124,7 @@ export function MeetingCalendar({ meetings, onDayClick }: { meetings: Meeting[];
     const blocked = new Set<string>();
     for (const m of meetingsOnScheduleDate) {
       const mStart = meetingStartMinutes(m.scheduledAt);
-      const mDur = m.durationSeconds ? m.durationSeconds / 60 : DEFAULT_DURATION;
+      const mDur = meetingDurationMinutesForConflicts(m.durationSeconds);
       for (const slot of TIME_SLOTS) {
         if (slotOverlapsMeeting(slotToMinutes(slot), 30, mStart, mDur)) {
           blocked.add(slot.label);
@@ -141,7 +143,7 @@ export function MeetingCalendar({ meetings, onDayClick }: { meetings: Meeting[];
     const slotMin = slotToMinutes(selectedSlot);
     const conflict = meetingsOnScheduleDate.find((m) => {
       const mStart = meetingStartMinutes(m.scheduledAt);
-      const mDur = m.durationSeconds ? m.durationSeconds / 60 : DEFAULT_DURATION;
+      const mDur = meetingDurationMinutesForConflicts(m.durationSeconds);
       return slotOverlapsMeeting(slotMin, meetingDuration, mStart, mDur);
     });
     if (conflict) {
@@ -164,7 +166,7 @@ export function MeetingCalendar({ meetings, onDayClick }: { meetings: Meeting[];
     setScheduleDate(date);
     setSelectedSlot(null);
     setMeetingTitle('');
-    setMeetingDuration(60);
+    setMeetingDuration(DEFAULT_MEETING_DURATION_MINUTES);
     setConflictWarning(null);
     setScheduleOpen(true);
   };
@@ -175,7 +177,11 @@ export function MeetingCalendar({ meetings, onDayClick }: { meetings: Meeting[];
     const dt = new Date(scheduleDate);
     dt.setHours(selectedSlot.hour, selectedSlot.minute, 0, 0);
     const isoLocal = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-    router.push(`/meetings/new?title=${encodeURIComponent(meetingTitle)}&scheduledAt=${encodeURIComponent(isoLocal)}`);
+    router.push(buildNewMeetingScheduleHref({
+      title: meetingTitle,
+      scheduledAtLocal: isoLocal,
+      durationMinutes: meetingDuration,
+    }));
     setScheduleOpen(false);
   };
 
@@ -316,7 +322,7 @@ export function MeetingCalendar({ meetings, onDayClick }: { meetings: Meeting[];
                     {new Date(m.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                   </span>
                   <span className="text-slate-400">
-                    ({m.durationSeconds ? Math.round(m.durationSeconds / 60) : DEFAULT_DURATION} min)
+                    ({meetingDurationMinutesForConflicts(m.durationSeconds)} min)
                   </span>
                   <span className="text-slate-500">— {m.title}</span>
                 </div>
