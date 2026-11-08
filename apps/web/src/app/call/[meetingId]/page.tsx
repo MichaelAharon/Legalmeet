@@ -8,6 +8,7 @@ import {
   Maximize2, Minimize2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { retainMediaStream, stopMediaStream } from '@/lib/media-session';
 import { useCallStore } from '@/stores/callStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useMeeting } from '@/hooks/useMeeting';
@@ -47,14 +48,18 @@ export default function CallPage() {
 
   // ===== Initialize camera/mic =====
   useEffect(() => {
+    let cancelled = false;
     let stream: MediaStream | null = null;
 
     async function initMedia() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const acquired = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         });
+        // Permission can resolve after the user has already left the page.
+        stream = retainMediaStream(acquired, cancelled);
+        if (!stream) return;
         localStreamRef.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
@@ -63,6 +68,7 @@ export default function CallPage() {
         joinTimeRef.current = Date.now();
         setMediaError(null);
       } catch (err: any) {
+        if (cancelled) return;
         console.error('Media access error:', err);
         // Still allow joining without camera/mic
         setMediaError(err.name === 'NotAllowedError'
@@ -77,9 +83,11 @@ export default function CallPage() {
     initMedia();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
+      cancelled = true;
+      stopMediaStream(stream);
+      stopMediaStream(localStreamRef.current);
+      localStreamRef.current = null;
+      stream = null;
     };
   }, []);
 
@@ -111,34 +119,45 @@ export default function CallPage() {
   // ===== Screen sharing =====
   useEffect(() => {
     if (!isScreenSharing) {
-      if (screenStreamRef.current) {
-        screenStreamRef.current.getTracks().forEach(t => t.stop());
-        screenStreamRef.current = null;
-      }
+      stopMediaStream(screenStreamRef.current);
+      screenStreamRef.current = null;
       return;
     }
 
+    let cancelled = false;
+
     async function startScreenShare() {
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
+        const acquired = await navigator.mediaDevices.getDisplayMedia({
           video: true,
           audio: false,
         });
+        const stream = retainMediaStream(acquired, cancelled);
+        if (!stream) return;
         screenStreamRef.current = stream;
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = stream;
         }
         // Auto-stop when user clicks "Stop sharing" in browser
-        stream.getVideoTracks()[0].onended = () => {
-          toggleScreenShare();
-        };
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.onended = () => {
+            if (!cancelled) toggleScreenShare();
+          };
+        }
       } catch {
-        // User cancelled — toggle back
-        toggleScreenShare();
+        // User cancelled — toggle back, unless the page already unmounted
+        if (!cancelled) toggleScreenShare();
       }
     }
 
     startScreenShare();
+
+    return () => {
+      cancelled = true;
+      stopMediaStream(screenStreamRef.current);
+      screenStreamRef.current = null;
+    };
   }, [isScreenSharing, toggleScreenShare]);
 
   // ===== Recording =====
@@ -253,8 +272,10 @@ export default function CallPage() {
   // ===== Leave call =====
   const handleLeave = useCallback(() => {
     // Stop all streams
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
-    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    stopMediaStream(localStreamRef.current);
+    stopMediaStream(screenStreamRef.current);
+    localStreamRef.current = null;
+    screenStreamRef.current = null;
     stopRecording();
     reset();
     clear();
